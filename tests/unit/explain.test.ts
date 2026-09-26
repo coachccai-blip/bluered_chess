@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commentForMove, describeLiveMove, describePurpose, explainBest, moveFeatures, spoken } from '../../src/analysis/explain';
+import { bestLineText, commentForMove, describeLiveMove, describePurpose, evalWords, explainBest, moveFeatures, spoken } from '../../src/analysis/explain';
 import { replayRecords, START_FEN } from '../../src/chess/game';
 import type { MoveEval } from '../../src/analysis/coach';
 
@@ -9,13 +9,13 @@ describe('caractéristiques d\'un coup', () => {
     expect(f.captured).toBe('n');
     expect(f.captureGain).toBe(320);
     expect(f.check).toBe(false);
-    expect(describePurpose(f)[0]).toContain('gagne le cavalier en d5');
+    expect(describePurpose(f)[0]).toBe('prend son cavalier en d5 gratuitement (3 points)');
     const castle = moveFeatures('4k3/8/8/8/8/8/8/4K2R w K - 0 1', 'e1g1')!;
     expect(castle.castle).toBe(true);
-    expect(describePurpose(castle)).toContain("met le roi à l'abri par le roque");
+    expect(describePurpose(castle)).toContain("met ton roi à l'abri");
     const dev = moveFeatures(START_FEN, 'g1f3')!;
     expect(dev.develops).toBe(true);
-    expect(describePurpose(dev)[0]).toContain('développe le cavalier vers f3');
+    expect(describePurpose(dev)[0]).toBe('sort ton cavalier');
     expect(moveFeatures(START_FEN, 'e2e5')).toBeNull();
   });
   it('détecte une pièce sauvée et une pièce laissée en prise', () => {
@@ -36,9 +36,11 @@ describe('explication du coup « Mieux »', () => {
     const [rec] = replayRecords(fen, ['Kf1']);
     const m = mk({ ...rec, evalBefore: 300, evalAfter: 0, bestMove: 'Rxd5', bestMoveLan: 'd1d5', bestLine: ['Rxd5', 'Kd7'], threat: 'Nf4', threatLan: 'd5f4', winProbLoss: 25, category: 'blunder' });
     const text = explainBest(m)!;
-    expect(text).toContain('Rxd5 gagne le cavalier en d5');
-    expect(text).toContain('Suite prévue : Rxd5 Kd7');
-    expect(text).toContain('Évaluation : +3.0 avec Rxd5, 0.0 après Kf1');
+    expect(text).toContain('Tour prend d5 prend son cavalier en d5 gratuitement (3 points).');
+    expect(text).toContain("Avec Tour prend d5, tu es en train de gagner. Après Roi f1, la position est équilibrée.");
+    expect(text).not.toMatch(/[+-]\d\.\d/); // pas de chiffres d'évaluation
+    expect(text).not.toContain('Suite prévue');
+    expect(bestLineText(m)).toBe('Suite possible : Rxd5 Kd7');
     const c = commentForMove(m, 'w');
     expect(c).toContain('Tu joues Roi f1');
     expect(c).toContain('mieux valait Tour prend d5');
@@ -55,6 +57,8 @@ describe('explication du coup « Mieux »', () => {
     const [mate] = replayRecords('6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1', ['Ra8#']);
     expect(describeLiveMove(mate, 'w')).toBe('Tu joues Tour a8 échec et mat. Échec et mat, la partie est terminée.');
     const [rec] = replayRecords('4k3/8/4p3/8/8/2N5/8/4K3 w - - 0 1', ['Nd5']);
-    expect(describeLiveMove(rec, 'w')).toContain('Attention : le cavalier d5 est en prise');
+    expect(describeLiveMove(rec, 'w')).toContain('Attention : ton cavalier d5 peut être pris.');
+    expect(evalWords(0)).toBe('la position est équilibrée');
+    expect(evalWords(-9999)).toBe('tu vas te faire mater');
   });
 });

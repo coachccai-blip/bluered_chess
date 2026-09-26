@@ -7,6 +7,7 @@ import { resultScore } from '../progress/profile';
 import { loadProfile } from '../data/db';
 import { EloCurve } from '../ui/EloCurve';
 import { Modal } from '../ui/Modal';
+import { openingForGame, openingLabel } from '../chess/openings';
 
 export function History() {
   const [games, setGames] = useState<Game[]>([]);
@@ -116,6 +117,10 @@ export function History() {
                   <strong>{g.playerColor === 'blue' ? 'Bleu' : 'Rouge'}</strong> {g.botElo ? `contre Bot ${g.botElo}` : g.imported ? '(importée)' : '(deux joueurs)'} · {g.sans.length} demi-coups · {g.result}
                 </div>
                 <div className="muted small">
+                  {(() => {
+                    const o = openingForGame(g.sans, g.startFen);
+                    return o ? <span>{openingLabel(o)} · </span> : null;
+                  })()}
                   {new Date(g.createdAt).toLocaleString('fr-FR')} {g.eloAfter !== undefined && g.eloBefore !== undefined ? `· Elo ${g.eloBefore} → ${g.eloAfter}` : ''} {g.analysisId ? '· analysée' : ''}
                 </div>
               </div>

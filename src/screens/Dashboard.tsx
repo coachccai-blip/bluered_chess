@@ -14,6 +14,8 @@ import { resultScore } from '../progress/profile';
 import { useInstallPrompt } from '../app/installPrompt';
 import { Ring } from '../ui/Ring';
 import { IconBoardEmpty, IconPlan, IconRadar, IconTrophy } from '../ui/icons';
+import { WeaknessPanel } from '../ui/WeaknessPanel';
+import { rankWeaknesses, type WeaknessSummary } from '../progress/weaknessGuide';
 
 export function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -24,6 +26,7 @@ export function Dashboard() {
   const { settings, palette, update } = useSettings();
   const current = useGame(useShallow((s) => ({ inProgress: s.records.length > 0 && !s.status.over, botElo: s.botElo, mode: s.mode, plies: s.records.length })));
   const { canInstall, installed, install } = useInstallPrompt();
+  const [openWeakness, setOpenWeakness] = useState<WeaknessSummary | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -47,6 +50,7 @@ export function Dashboard() {
 
   return (
     <div className="stack">
+      {openWeakness && <WeaknessPanel weakness={openWeakness} onClose={() => setOpenWeakness(null)} />}
       {!profile.onboardingDone && <Onboarding profile={profile} onDone={(p) => setProfile(p)} onLevel={(elo) => void update({ defaultHeatmapMode: elo <= 800 ? 'P' : 'A' })} />}
       <div className="grid grid-2">
         <div className="card card-hero">
@@ -110,8 +114,8 @@ export function Dashboard() {
               <Radar current={profile.indicators} previous={profile.previousIndicators} />
               <div className="indicator-list">
                 {INDICATORS.filter((d) => profile.indicators[d.key] !== undefined).map((d) => (
-                  <div key={d.key} className={`indicator ${isAlert(d, profile.indicators[d.key]) ? 'alert' : ''}`} title={d.description}>
-                    <span>{d.label}</span>
+                  <div key={d.key} className={`indicator clickable ${isAlert(d, profile.indicators[d.key]) ? 'alert' : ''}`} title={`${d.description} Clique pour voir le programme d'entraînement.`} role="button" tabIndex={0} data-testid={`indicator-${d.key}`} onClick={() => setOpenWeakness(rankWeaknesses(profile.indicators).find((w) => w.key === d.key) ?? null)} onKeyDown={(e) => e.key === 'Enter' && setOpenWeakness(rankWeaknesses(profile.indicators).find((w) => w.key === d.key) ?? null)}>
+                    <span>{d.label} <span className="muted small">→ programme</span></span>
                     <span>
                       <span className="val">{profile.indicators[d.key]}</span> <span className="muted small">{d.unit}</span>{' '}
                       {isAlert(d, profile.indicators[d.key]) ? <span className="tag tag-alert">à travailler</span> : <span className="tag tag-ok">ok</span>}
@@ -123,6 +127,31 @@ export function Dashboard() {
           )}
         </div>
       </div>
+      {Object.keys(profile.indicators).length > 0 && (
+        <div className="card" data-testid="priority-programs">
+          <div className="card-title">
+            <IconRadar className="ico" />
+            <h3>Programmes prioritaires</h3>
+          </div>
+          <div className="grid grid-2" style={{ gap: '.6rem' }}>
+            {rankWeaknesses(profile.indicators)
+              .filter((w) => w.value !== undefined)
+              .slice(0, 2)
+              .map((w) => (
+                <div key={w.key} className="card" style={{ padding: '.7rem .8rem', borderColor: w.alert ? 'rgba(239,68,68,.5)' : undefined }}>
+                  <div className="row spread">
+                    <strong>{w.guide.title}</strong>
+                    <span className={`tag ${w.alert ? 'tag-alert' : 'tag-ok'}`}>{w.value} {w.unit}</span>
+                  </div>
+                  <p className="muted small" style={{ margin: '.3rem 0 .5rem' }}>{w.guide.method[0]}</p>
+                  <button type="button" className="btn btn-sm btn-primary" onClick={() => setOpenWeakness(w)}>
+                    Voir le programme
+                  </button>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
       <div className="grid grid-2">
         <div className="card">
           <div className="card-title">

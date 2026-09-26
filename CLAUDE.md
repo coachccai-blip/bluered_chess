@@ -97,6 +97,13 @@ objectif de partie tiré du plan (`goalFor`, `evaluateGoal`) stocké sur la part
 erreurs jouées en moins de 3 s (temps par coup `thinkMs` dans les enregistrements, `thinkTimes` sur la partie). Débrief : mode
 « Devine le coup » (échiquier jouable aux positions du joueur, proposition notée par le moteur).
 
+**Programmes par faiblesse.** `progress/weaknessGuide.ts` : pour chaque indicateur du radar, un programme (diagnostic chiffré, méthode
+en partie, actions, routine) ; `rankWeaknesses` trie les faiblesses. `progress/launchAction.ts` lance une action (fiches de répétition
+filtrées par motif, puzzles intégrés de `puzzles.ts` dont les solutions sont vérifiées par les tests, exercices de visualisation via
+`#/entrainement?ex=…`, finales, partie avec objectif, lien Lichess). `ui/WeaknessPanel.tsx` est ouvert depuis le radar de l'accueil
+(indicateurs cliquables, « Programmes prioritaires ») et depuis l'entraînement (« Entraînement par faiblesse »). En mode exercice, une
+série de puzzles (`exerciseTheme`) propose « Puzzle suivant » ; tout coup qui mate est accepté pour une solution en « # ».
+
 **Profil et plan (section 8).** Indicateurs sur les 20 dernières parties : pièces pendantes (> 3/100 coups),
 tactiques ratées (> 4/100), sécurité du roi (> 20 % des parties), finales (< 75 % précision), ouverture (< 85 %),
 cases rouges (> 5/100), gestion de l'avantage (> 25 %). Plan = 2 indicateurs les plus faibles × 3 exercices,

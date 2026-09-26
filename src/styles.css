@@ -196,6 +196,8 @@ ul { margin: .25rem 0 .75rem; padding-left: 1.2rem; }
 .indicator-list { display: grid; gap: .4rem; }
 .indicator { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: .45rem .6rem; border-radius: var(--radius-sm); background: var(--bg-3); border: 1px solid var(--border); }
 .indicator.alert { border-color: rgba(239,68,68,.5); }
+.indicator.clickable { cursor: pointer; transition: background .15s; }
+.indicator.clickable:hover { background: var(--bg-4); }
 .indicator .val { font-weight: 800; font-variant-numeric: tabular-nums; }
 .empty { text-align: center; padding: 1.5rem 1rem; color: var(--muted); }
 .empty svg { width: 64px; height: 64px; margin-bottom: .5rem; opacity: .7; }

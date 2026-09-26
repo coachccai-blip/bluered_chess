@@ -3,6 +3,9 @@ import { db } from '../data/db';
 import type { Analysis, Drill, Exercise, Game, TrainingPlan } from '../data/models';
 import { dueDrills, isMastered } from '../progress/drills';
 import { MOTIF_LABEL, type Motif } from '../analysis/motifs';
+import { WeaknessPanel } from '../ui/WeaknessPanel';
+import { rankWeaknesses, type WeaknessSummary } from '../progress/weaknessGuide';
+import type { Profile } from '../data/models';
 import { INDICATORS } from '../progress/profile';
 import { analyzedPairs, refreshProfileAndPlan } from '../data/gameService';
 import { blindfoldScore, countAttackersQuestion, knightSquaresQuestion, type BlindfoldQuestion, type CountQuestion } from '../progress/exercises';
@@ -22,13 +25,19 @@ export function Training() {
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [pairs, setPairs] = useState<{ game: Game; analysis: Analysis }[]>([]);
   const [drills, setDrills] = useState<Drill[]>([]);
-  const [active, setActive] = useState<Active>(null);
+  const [active, setActive] = useState<Active>(() => {
+    const m = /[?&]ex=(knight|count|hanging)/.exec(window.location.hash);
+    return m ? ({ kind: m[1] } as Active) : null;
+  });
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [openWeakness, setOpenWeakness] = useState<WeaknessSummary | null>(null);
   const { palette, settings } = useSettings();
 
   const reload = async () => {
     setPlan((await db.plans.orderBy('generatedAt').reverse().first()) ?? null);
     setPairs(await analyzedPairs());
     setDrills(await db.drills.toArray());
+    setProfile(await loadProfile(db));
   };
   useEffect(() => {
     void reload();
@@ -99,8 +108,27 @@ export function Training() {
       {active?.kind === 'knight' && <BlindfoldExercise onClose={() => setActive(null)} />}
       {active?.kind === 'count' && <CountExercise onClose={() => setActive(null)} />}
       {active?.kind === 'hanging' && <HangingExercise pairs={pairs} onClose={() => setActive(null)} />}
+      {openWeakness && <WeaknessPanel weakness={openWeakness} onClose={() => setOpenWeakness(null)} />}
       {!active && (
         <>
+          <div className="card" data-testid="by-weakness">
+            <h3>Entraînement par faiblesse</h3>
+            <p className="muted small">Chaque axe du radar a son programme : diagnostic, méthode à appliquer en partie, exercices ciblés et routine.</p>
+            <div className="indicator-list">
+              {rankWeaknesses(profile?.indicators ?? {}).map((w) => (
+                <div key={w.key} className={`indicator ${w.alert ? 'alert' : ''}`}>
+                  <span>
+                    <strong>{w.guide.title}</strong>{' '}
+                    {w.value === undefined ? <span className="muted small">pas encore mesuré</span> : <span className="muted small">{w.value} {w.unit}</span>}{' '}
+                    {w.alert && <span className="tag tag-alert">à travailler</span>}
+                  </span>
+                  <button type="button" className={`btn btn-sm ${w.alert ? 'btn-primary' : ''}`} data-testid={`program-${w.key}`} onClick={() => setOpenWeakness(w)}>
+                    Programme
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
           <div className="card" data-testid="drills">
             <div className="row spread">
               <h3>Révisions du jour</h3>

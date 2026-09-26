@@ -93,6 +93,14 @@ export interface Settings {
   allowUndo: boolean;
   showEvalBar: boolean;
   analysisDepth: number;
+  /** Voix du coach. */
+  voiceEnabled: boolean;
+  voiceName?: string;
+  voiceRate: number;
+  /** Commentaires en direct pendant la partie : off, descriptif (faits visibles), complet (avec avis du moteur). */
+  liveComments: 'off' | 'descriptive' | 'full';
+  /** Lecture automatique des commentaires dans le débrief. */
+  autoReadDebrief: boolean;
   defaultHeatmapMode: 'A' | 'B' | 'R' | 'C' | 'P' | 'H' | 'X';
   ignorePinned: boolean;
   xray: boolean;
@@ -118,6 +126,10 @@ export const DEFAULT_SETTINGS: Settings = {
   allowUndo: true,
   showEvalBar: false,
   analysisDepth: typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent) ? 12 : 16,
+  voiceEnabled: true,
+  voiceRate: 1,
+  liveComments: 'descriptive',
+  autoReadDebrief: true,
   defaultHeatmapMode: 'A',
   ignorePinned: false,
   xray: false,

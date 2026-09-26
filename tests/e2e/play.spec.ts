@@ -55,6 +55,8 @@ test('le bot 800 répond et la partie est analysable, y compris hors ligne', asy
   await page.getByTestId('color-w').click();
   await page.getByTestId('start-game').click();
   await move(page, 'e2', 'e4');
+  // Commentaire en direct du coach sur mon coup.
+  await expect(page.getByTestId('live-comment')).toContainText('Tu joues e4');
   // Le bot (Rouge) doit jouer dans les 30 s (chargement du moteur inclus).
   await expect(page.locator('[data-testid="board"]')).toHaveAttribute('data-fen', / w /, { timeout: 30_000 });
   const rows = page.getByTestId('move-list');
@@ -67,6 +69,10 @@ test('le bot 800 répond et la partie est analysable, y compris hors ligne', asy
   await expect(page.getByTestId('status')).toContainText('Abandon');
   await page.getByTestId('go-debrief').click();
   await expect(page.getByTestId('accuracy')).toBeVisible({ timeout: 90_000 });
+  // Commentaire de chaque coup dans le débrief et bouton de lecture.
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByTestId('move-comment')).toContainText('Tu joues e4');
+  await expect(page.getByTestId('read-game')).toBeVisible();
   await context.setOffline(false);
 });
 

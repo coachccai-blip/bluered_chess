@@ -9,7 +9,7 @@ import { useEngine } from '../engine/useEngine';
 import { botMove, thinkingDelayMs } from '../engine/bot';
 import { profileFor } from '../engine/botProfiles';
 import { lineScore } from '../engine/engineClient';
-import { START_FEN, turnOf, lanToSan } from '../chess/game';
+import { START_FEN, turnOf, lanToSan, type MoveRecord } from '../chess/game';
 import type { Color, Square } from '../chess/types';
 import { saveFinishedGame } from '../data/gameService';
 import { db, loadProfile } from '../data/db';
@@ -21,6 +21,10 @@ import { Modal } from '../ui/Modal';
 import { Material } from '../ui/Material';
 import { Toast } from '../ui/Toast';
 import { IconList, IconKnight } from '../ui/icons';
+import { describeLiveMove, spoken, explainBest } from '../analysis/explain';
+import { speak, stopSpeaking } from '../ui/speech';
+import { buildMoveEval } from '../analysis/analyzeGame';
+import { CATEGORY_LABEL } from '../analysis/classify';
 
 interface PendingSetup {
   mode: 'bot' | 'human';
@@ -41,6 +45,8 @@ export function Play() {
   const [exerciseFeedback, setExerciseFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [comment, setComment] = useState<string | null>(null);
+  const commentJob = useRef(0);
   /** Position consultée (null = direct). */
   const [viewPly, setViewPly] = useState<number | null>(null);
   const [botRecords, setBotRecords] = useState<Record<number, { wins: number; losses: number; draws: number }>>({});
@@ -83,6 +89,8 @@ export function Play() {
     return () => window.removeEventListener('keydown', on);
   }, [g.records.length]);
 
+  useEffect(() => () => stopSpeaking(), []);
+
   const turn = turnOf(g.fen);
   const botColor: Color | null = vsBot ? (g.playerColor === 'w' ? 'b' : 'w') : null;
   const movable: Color[] = g.status.over || viewPly !== null ? [] : g.mode === 'human' ? ['w', 'b'] : [g.playerColor];
@@ -106,6 +114,7 @@ export function Play() {
         if (choice) {
           const rec = useGame.getState().playMove({ from: choice.lan.slice(0, 2) as Square, to: choice.lan.slice(2, 4) as Square, promotion: (choice.lan[4] as 'q') || undefined });
           if (rec && settings.sounds) (rec.captured ? sounds.capture : rec.check ? sounds.check : sounds.move)();
+          if (rec) void commentLastMove(rec);
         }
       } finally {
         if (job === botJob.current) useGame.getState().setBotThinking(false);
@@ -159,19 +168,60 @@ export function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [g.status.over, g.savedGameId]);
 
+  /** Commente le dernier coup (descriptif immédiat, puis avis du moteur si activé) et le lit à voix haute. */
+  const commentLastMove = useCallback(
+    async (rec: MoveRecord) => {
+      const st = useSettings.getState().settings;
+      if (st.liveComments === 'off') return;
+      const job = ++commentJob.current;
+      const pc = useGame.getState().playerColor;
+      let text = describeLiveMove(rec, pc);
+      setComment(text);
+      const say = (t: string) => st.voiceEnabled && void speak(t, { voiceName: st.voiceName, rate: st.voiceRate });
+      if (st.liveComments !== 'full' || !engine || rec.color !== pc) {
+        say(text);
+        return;
+      }
+      // Avis du moteur sur mon coup : deux évaluations rapides (avant / après).
+      try {
+        const [before, after] = await Promise.all([
+          engine.analyze(rec.fenBefore, { depth: 10 }),
+          engine.analyze(rec.fenAfter, { depth: 10 }),
+        ]);
+        if (job !== commentJob.current) return;
+        const toPos = (fen: string, r: typeof before) => {
+          const l = r.lines[0];
+          const stm = fen.split(' ')[1] === 'w' ? 1 : -1;
+          const cp = l ? lineScore(l) * stm : 0;
+          return { cpWhite: cp, mate: l?.mate ?? null, bestLan: r.bestMove ?? l?.pv[0] ?? null, pv: l?.pv ?? [] };
+        };
+        const ev = buildMoveEval(rec, toPos(rec.fenBefore, before), toPos(rec.fenAfter, after), useGame.getState().records.slice(0, -1));
+        const verdict = ev.category === 'excellent' || ev.category === 'good' ? `${CATEGORY_LABEL[ev.category]} coup.` : `${CATEGORY_LABEL[ev.category]}${ev.bestMove ? `, mieux valait ${spoken(ev.bestMove)}.` : '.'}`;
+        const why = ev.explanation ?? explainBest(ev);
+        text = `${text} ${verdict}${why ? ` ${why}` : ''}`;
+        setComment(text);
+        say(text);
+      } catch {
+        say(text);
+      }
+    },
+    [engine],
+  );
+
   const onMove = useCallback(
     (m: { from: Square; to: Square; promotion?: 'q' | 'r' | 'b' | 'n' }) => {
       const fenBefore = useGame.getState().fen;
       const rec = useGame.getState().playMove(m);
       if (!rec) return;
       if (settings.sounds) (rec.captured ? sounds.capture : rec.check ? sounds.check : sounds.move)();
+      void commentLastMove(rec);
       if (useGame.getState().mode === 'exercise' && useGame.getState().exerciseBestMove) {
         const best = useGame.getState().exerciseBestMove!;
         const ok = rec.san === best || rec.lan === best || lanToSan(fenBefore, best) === rec.san;
         setExerciseFeedback(ok ? { ok: true, text: `Bien joué : ${rec.san} était le bon coup.` } : { ok: false, text: `${rec.san} n'est pas le meilleur coup. Le moteur préférait ${best}. Annule et réessaie, ou continue la partie.` });
       }
     },
-    [settings.sounds],
+    [settings.sounds, commentLastMove],
   );
 
   const startGame = () => {
@@ -179,6 +229,8 @@ export function Play() {
     botJob.current++;
     g.newGame({ mode: setup.mode, playerColor: color, botElo: setup.botElo });
     g.setHeatmapMode(settings.defaultHeatmapMode);
+    stopSpeaking();
+    setComment(null);
     setSetupOpen(false);
     setExerciseFeedback(null);
     setDrawMsg(null);
@@ -324,6 +376,20 @@ export function Play() {
             </p>
           )}
         </div>
+        {settings.liveComments !== 'off' && (
+          <div className="card" data-testid="live-comment">
+            <div className="card-title">
+              <IconKnight className="ico" />
+              <h3>Coach</h3>
+              {settings.voiceEnabled && (
+                <button type="button" className="btn btn-sm btn-ghost" style={{ marginLeft: 'auto' }} onClick={() => comment && void speak(comment, { voiceName: settings.voiceName, rate: settings.voiceRate })} title="Relire">
+                  🔊
+                </button>
+              )}
+            </div>
+            <p className="small" style={{ margin: 0 }}>{comment ?? 'Je commente chaque coup ici. Active la voix dans les réglages pour m\'entendre.'}</p>
+          </div>
+        )}
         <div className="card">
           <div className="card-title">
             <IconList className="ico" />

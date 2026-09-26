@@ -23,7 +23,7 @@ import { Toast } from '../ui/Toast';
 import { IconList, IconKnight } from '../ui/icons';
 import { describeLiveMove, spoken, explainBest } from '../analysis/explain';
 import { openingAnnouncement, openingForGame, openingLabel } from '../chess/openings';
-import { speak, stopSpeaking } from '../ui/speech';
+import { speak, stopSpeaking, useSpeechStatus } from '../ui/speech';
 import { buildMoveEval } from '../analysis/analyzeGame';
 import { CATEGORY_LABEL } from '../analysis/classify';
 
@@ -47,6 +47,7 @@ export function Play() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [comment, setComment] = useState<string | null>(null);
+  const speechStatus = useSpeechStatus();
   const commentJob = useRef(0);
   /** Position consultée (null = direct). */
   const [viewPly, setViewPly] = useState<number | null>(null);
@@ -396,6 +397,13 @@ export function Play() {
               )}
             </div>
             <p className="small" style={{ margin: 0 }}>{comment ?? 'Je commente chaque coup ici. Active la voix dans les réglages pour m\'entendre.'}</p>
+            {settings.voiceEnabled && speechStatus.state === 'preparing' && <p className="muted small" style={{ margin: '.3rem 0 0' }}>Préparation de la voix HD…</p>}
+            {settings.voiceEnabled && speechStatus.state === 'speaking' && <p className="muted small" style={{ margin: '.3rem 0 0' }}>🔊 lecture ({speechStatus.engine === 'hd' ? 'voix HD' : 'voix du navigateur'})</p>}
+            {settings.voiceEnabled && speechStatus.state === 'error' && (
+              <p className="small" style={{ margin: '.3rem 0 0', color: 'var(--red-2)' }} data-testid="speech-error">
+                {speechStatus.message}
+              </p>
+            )}
           </div>
         )}
         <div className="card">

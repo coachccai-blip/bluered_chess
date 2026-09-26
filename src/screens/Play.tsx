@@ -20,6 +20,7 @@ import { colorLabel } from '../board/theme';
 import { Modal } from '../ui/Modal';
 import { Material } from '../ui/Material';
 import { Toast } from '../ui/Toast';
+import { EvalBarVertical } from '../ui/EvalBarVertical';
 import { IconList, IconKnight } from '../ui/icons';
 import { describeLiveMove, spoken, explainBest } from '../analysis/explain';
 import { openingAnnouncement, openingForGame, openingLabel } from '../chess/openings';
@@ -42,6 +43,7 @@ export function Play() {
   const [setup, setSetup] = useState<PendingSetup>({ mode: 'bot', color: 'w', botElo: g.botElo });
   const [recommended, setRecommended] = useState<number | undefined>();
   const [evalCp, setEvalCp] = useState<number | null>(null);
+  const [evalPending, setEvalPending] = useState(false);
   const [drawMsg, setDrawMsg] = useState<string | null>(null);
   const [exerciseFeedback, setExerciseFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -131,19 +133,25 @@ export function Play() {
       setEvalCp(null);
       return;
     }
+    if (g.status.over && g.status.reason === 'checkmate') {
+      setEvalCp(g.status.result === '1-0' ? 10000 : -10000);
+      return;
+    }
     let alive = true;
+    setEvalPending(true);
     engine
-      .analyze(g.fen, { depth: 8 })
+      .analyze(g.fen, { depth: 10 })
       .then((r) => {
         if (!alive) return;
         const l = r.lines[0];
         if (l) setEvalCp(lineScore(l) * (turn === 'w' ? 1 : -1));
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => alive && setEvalPending(false));
     return () => {
       alive = false;
     };
-  }, [engine, g.fen, settings.showEvalBar, g.mode, turn]);
+  }, [engine, g.fen, settings.showEvalBar, g.mode, turn, g.status]);
 
   // Fin de partie : sauvegarde unique.
   useEffect(() => {
@@ -290,29 +298,27 @@ export function Play() {
     <div className="play-layout">
       <div>
         <PlayerBar color={g.flipped ? g.playerColor : (botColor ?? 'b')} name={g.flipped ? (vsBot ? `Moi (${playerLabel})` : colorLabel('w', palette)) : vsBot ? `${botProfile.name} (${g.botElo})` : colorLabel('b', palette)} palette={palette} active={turn === (g.flipped ? g.playerColor : (botColor ?? 'b')) && !g.status.over} thinking={!g.flipped && g.botThinking} fen={viewedFen} />
-        <Board
-          fen={viewedFen}
-          flipped={g.flipped}
-          movable={movable}
-          onMove={onMove}
-          lastMove={viewedLastMove}
-          arrows={arrows}
-          heatmapMode={g.heatmapMode}
-          palette={palette}
-          intensity={settings.heatmapIntensity}
-          showCounts={settings.showCounts}
-          showHanging={settings.showHanging}
-          showLoose={settings.showLoose}
-          hatching={settings.hatching}
-          attackOptions={attackOptions}
-          animations={settings.animations}
-        />
+        <div className="board-row">
+          {settings.showEvalBar && g.mode !== 'exercise' && <EvalBarVertical cp={evalCp} flipped={g.flipped} palette={palette} pending={evalPending} />}
+          <Board
+            fen={viewedFen}
+            flipped={g.flipped}
+            movable={movable}
+            onMove={onMove}
+            lastMove={viewedLastMove}
+            arrows={arrows}
+            heatmapMode={g.heatmapMode}
+            palette={palette}
+            intensity={settings.heatmapIntensity}
+            showCounts={settings.showCounts}
+            showHanging={settings.showHanging}
+            showLoose={settings.showLoose}
+            hatching={settings.hatching}
+            attackOptions={attackOptions}
+            animations={settings.animations}
+          />
+        </div>
         <PlayerBar color={g.flipped ? (botColor ?? 'b') : g.playerColor} name={g.flipped ? (vsBot ? `${botProfile.name} (${g.botElo})` : colorLabel('b', palette)) : vsBot ? `Moi (${playerLabel})` : colorLabel('w', palette)} palette={palette} active={turn === (g.flipped ? (botColor ?? 'b') : g.playerColor) && !g.status.over} thinking={g.flipped && g.botThinking} fen={viewedFen} />
-        {settings.showEvalBar && evalCp !== null && (
-          <div className="eval-bar" title={`Évaluation : ${(evalCp / 100).toFixed(1)}`} style={{ maxWidth: 'min(92vw, 640px)', margin: '.4rem auto' }}>
-            <div style={{ width: `${50 + 50 * (2 / (1 + Math.exp(-0.00368208 * evalCp)) - 1)}%` }} />
-          </div>
-        )}
         {g.records.length > 0 && (
           <div className="review-bar" data-testid="review-bar">
             <button type="button" className="btn btn-sm" onClick={() => setViewPly(0)} title="Début">⏮</button>
@@ -358,6 +364,11 @@ export function Play() {
             <button type="button" className="btn btn-sm" onClick={() => g.setFlipped(!g.flipped)} title="Retourner l'échiquier">
               Retourner
             </button>
+            {g.mode !== 'exercise' && (
+              <button type="button" className={`btn btn-sm ${settings.showEvalBar ? '' : 'btn-ghost'}`} data-testid="evalbar-toggle" aria-pressed={settings.showEvalBar} onClick={() => void useSettings.getState().update({ showEvalBar: !settings.showEvalBar })} title="Afficher ou masquer la barre d'évaluation (qui a l'avantage)">
+                {settings.showEvalBar ? 'Masquer la barre' : 'Barre d\'avantage'}
+              </button>
+            )}
             {(settings.allowUndo || !vsBot) && (
               <button type="button" className="btn btn-sm" data-testid="undo" disabled={g.records.length === 0 || g.status.over} onClick={undo}>
                 Annuler
@@ -430,6 +441,7 @@ export function Play() {
             <span><i style={{ background: palette.b.overlay }} />attaquée par le Rouge</span>
             <span><i style={{ background: `linear-gradient(135deg, ${palette.w.overlay} 50%, ${palette.b.overlay} 50%)` }} />contestée</span>
           </div>
+          <p className="small" style={{ margin: '0 0 .4rem' }}><strong>Flèches et marques :</strong> clic droit sur une case pour la marquer, clic droit glissé pour une flèche (Maj rouge, Alt bleu, Ctrl jaune) ; clic gauche dans le vide ou Échap pour effacer. Sur mobile : appui long. Le bouton ✎ sur l'échiquier permet de dessiner au clic gauche.</p>
           <strong>Heatmap :</strong> chiffres = nombre d'attaquants (Bleu en haut à gauche, Rouge en bas à droite). Anneau pulsant = pièce en prise. Raccourcis clavier A B R C P H X.
         </div>
       </aside>

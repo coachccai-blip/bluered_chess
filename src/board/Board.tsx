@@ -42,6 +42,9 @@ export interface BoardProps {
 const SIZE = 800;
 const SQ = SIZE / 8;
 
+/** Couleurs d'annotation (vert par défaut, Maj rouge, Alt bleu, Ctrl jaune), comme sur chess.com. */
+export const ANNOT_COLORS = { green: '#15781B', red: '#882020', blue: '#003088', yellow: '#E68F00' };
+
 /**
  * Identités stables des pièces entre deux positions : la pièce déplacée garde son identifiant (ainsi que la tour
  * du roque), ce qui permet d'animer le glissement avec des clés React constantes.
@@ -82,6 +85,12 @@ export function Board(p: BoardProps) {
   const [hover, setHover] = useState<Square | null>(null);
   const [drag, setDrag] = useState<{ from: Square; x: number; y: number } | null>(null);
   const [promotion, setPromotion] = useState<{ from: Square; to: Square } | null>(null);
+  // Annotations utilisateur (flèches et cases marquées), comme sur chess.com.
+  const [userArrows, setUserArrows] = useState<Arrow[]>([]);
+  const [userMarks, setUserMarks] = useState<{ square: Square; color: string }[]>([]);
+  const [annot, setAnnot] = useState<{ from: Square; to: Square | null; color: string } | null>(null);
+  const [drawMode, setDrawMode] = useState(false);
+  const longPress = useRef<{ timer: number; sq: Square; x: number; y: number } | null>(null);
 
   const board = useMemo(() => parseFenBoard(p.fen), [p.fen]);
   const pieces = useMemo(() => boardPieces(board), [board]);
@@ -92,6 +101,17 @@ export function Board(p: BoardProps) {
     idsRef.current.fen = p.fen;
   }
   const animate = p.animations !== false && !skipAnimRef.current;
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setUserArrows([]);
+        setUserMarks([]);
+        setAnnot(null);
+      }
+    };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, []);
   useEffect(() => {
     skipAnimRef.current = false;
   }, [p.fen]);
@@ -146,9 +166,75 @@ export function Board(p: BoardProps) {
     return true;
   };
 
+  const annotColor = (e: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean }) =>
+    e.shiftKey ? ANNOT_COLORS.red : e.altKey ? ANNOT_COLORS.blue : e.ctrlKey || e.metaKey ? ANNOT_COLORS.yellow : ANNOT_COLORS.green;
+
+  const clearAnnotations = () => {
+    if (userArrows.length || userMarks.length) {
+      setUserArrows([]);
+      setUserMarks([]);
+    }
+  };
+
+  const startAnnotation = (sq: Square, color: string) => {
+    setDrag(null);
+    setSelected(null);
+    setAnnot({ from: sq, to: sq, color });
+  };
+
+  const finishAnnotation = (to: Square | null) => {
+    if (!annot) return;
+    const { from, color } = annot;
+    setAnnot(null);
+    if (!to || to === from) {
+      setUserMarks((marks) => {
+        const i = marks.findIndex((m) => m.square === from);
+        if (i >= 0 && marks[i].color === color) return marks.filter((_, k) => k !== i);
+        return [...marks.filter((m) => m.square !== from), { square: from, color }];
+      });
+      return;
+    }
+    setUserArrows((arrows) => {
+      const i = arrows.findIndex((a) => a.from === from && a.to === to);
+      if (i >= 0 && arrows[i].color === color) return arrows.filter((_, k) => k !== i);
+      return [...arrows.filter((a) => !(a.from === from && a.to === to)), { from, to, color }];
+    });
+  };
+
+  const cancelLongPress = () => {
+    if (longPress.current) {
+      window.clearTimeout(longPress.current.timer);
+      longPress.current = null;
+    }
+  };
+
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     const sq = squareFromEvent(e);
     if (!sq) return;
+    // Clic droit (ou mode crayon) : annotation.
+    if (e.button === 2 || (drawMode && e.button === 0)) {
+      e.preventDefault();
+      startAnnotation(sq, annotColor(e));
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+      return;
+    }
+    if (e.button !== 0) return;
+    // Clic gauche : efface les annotations (comme sur chess.com).
+    clearAnnotations();
+    // Appui long (tactile) : annotation.
+    if (e.pointerType === 'touch') {
+      cancelLongPress();
+      const timer = window.setTimeout(() => {
+        longPress.current = null;
+        startAnnotation(sq, ANNOT_COLORS.green);
+        try {
+          navigator.vibrate?.(20);
+        } catch {
+          /* ignore */
+        }
+      }, 450);
+      longPress.current = { timer, sq, x: e.clientX, y: e.clientY };
+    }
     p.onSquareClick?.(sq);
     if (selected && selected !== sq && tryMove(selected, sq)) {
       setSelected(null);
@@ -169,6 +255,11 @@ export function Board(p: BoardProps) {
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const sq = squareFromEvent(e);
     setHover(sq);
+    if (longPress.current && (Math.abs(e.clientX - longPress.current.x) > 12 || Math.abs(e.clientY - longPress.current.y) > 12)) cancelLongPress();
+    if (annot) {
+      if (sq !== annot.to) setAnnot({ ...annot, to: sq });
+      return;
+    }
     if (drag) {
       const rect = svgRef.current!.getBoundingClientRect();
       setDrag({ ...drag, x: ((e.clientX - rect.left) / rect.width) * SIZE, y: ((e.clientY - rect.top) / rect.height) * SIZE });
@@ -176,6 +267,11 @@ export function Board(p: BoardProps) {
   };
 
   const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    cancelLongPress();
+    if (annot) {
+      finishAnnotation(squareFromEvent(e));
+      return;
+    }
     if (!drag) return;
     const sq = squareFromEvent(e);
     const from = drag.from;
@@ -195,6 +291,11 @@ export function Board(p: BoardProps) {
   };
 
   const promoPieces: ('q' | 'r' | 'b' | 'n')[] = ['q', 'r', 'b', 'n'];
+  const allArrows: (Arrow & { user?: boolean })[] = [
+    ...(p.arrows ?? []),
+    ...userArrows.map((a) => ({ ...a, user: true })),
+    ...(annot && annot.to && annot.to !== annot.from ? [{ from: annot.from, to: annot.to, color: annot.color, user: true }] : []),
+  ];
 
   return (
     <div className="board-wrap">
@@ -208,8 +309,12 @@ export function Board(p: BoardProps) {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerLeave={() => setHover(null)}
-        style={{ touchAction: 'none', userSelect: 'none' }}
+        onPointerLeave={() => {
+          setHover(null);
+          cancelLongPress();
+        }}
+        onContextMenu={(e) => e.preventDefault()}
+        style={{ touchAction: 'none', userSelect: 'none', cursor: drawMode ? 'crosshair' : undefined }}
       >
         {/* Cases */}
         {ALL_SQUARES.map((sq) => {
@@ -227,6 +332,14 @@ export function Board(p: BoardProps) {
           const { x, y } = squareXY(sq, p.flipped, SQ);
           return <rect key={`mk-${sq}`} x={x + 3} y={y + 3} width={SQ - 6} height={SQ - 6} fill="none" stroke="#f5c542" strokeWidth={5} />;
         })}
+        {/* Cases marquées par l'utilisateur */}
+        {userMarks.map((m) => {
+          const { x, y } = squareXY(m.square, p.flipped, SQ);
+          return <rect key={`um-${m.square}`} data-usermark={m.square} x={x} y={y} width={SQ} height={SQ} fill={m.color} opacity={0.55} style={{ pointerEvents: 'none' }} />;
+        })}
+        {annot && (!annot.to || annot.to === annot.from) && (
+          <rect {...squareXY(annot.from, p.flipped, SQ)} width={SQ} height={SQ} fill={annot.color} opacity={0.35} style={{ pointerEvents: 'none' }} />
+        )}
         {/* Heatmap */}
         <ThreatOverlay
           summary={summary}
@@ -300,15 +413,15 @@ export function Board(p: BoardProps) {
             if (!pc) return null;
             return <Piece type={pc.type} color={pc.color} x={drag.x - SQ / 2} y={drag.y - SQ / 2} size={SQ} fillColor={p.palette[pc.color].piece} />;
           })()}
-        {/* Flèches */}
+        {/* Flèches (fournies par l'écran + dessinées par l'utilisateur) */}
         <defs>
-          {(p.arrows ?? []).map((a, i) => (
+          {allArrows.map((a, i) => (
             <marker key={i} id={`arrow-${i}`} viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
               <path d="M0 0L10 5L0 10z" fill={a.color} />
             </marker>
           ))}
         </defs>
-        {(p.arrows ?? []).map((a, i) => {
+        {allArrows.map((a, i) => {
           const f = squareXY(a.from, p.flipped, SQ);
           const t = squareXY(a.to, p.flipped, SQ);
           const x1 = f.x + SQ / 2;
@@ -318,7 +431,7 @@ export function Board(p: BoardProps) {
           const mx = (x1 + x2) / 2;
           const my = (y1 + y2) / 2;
           return (
-            <g key={`arrow-${i}`} style={{ pointerEvents: 'none' }} opacity={0.85}>
+            <g key={`arrow-${i}`} data-userarrow={a.user ? `${a.from}${a.to}` : undefined} style={{ pointerEvents: 'none' }} opacity={a.user ? 0.8 : 0.85}>
               <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={a.color} strokeWidth={SQ * 0.16} strokeLinecap="round" strokeDasharray={a.dashed ? '14 10' : undefined} markerEnd={`url(#arrow-${i})`} />
               {a.crossed && (
                 <g stroke="#111" strokeWidth={SQ * 0.08} strokeLinecap="round">
@@ -330,6 +443,20 @@ export function Board(p: BoardProps) {
           );
         })}
       </svg>
+      <button
+        type="button"
+        className={`draw-toggle ${drawMode ? 'on' : ''}`}
+        data-testid="draw-toggle"
+        aria-pressed={drawMode}
+        title={drawMode ? 'Mode crayon actif : clic gauche = marquer, glisser = flèche. Clic droit toujours disponible.' : 'Dessiner des flèches et marquer des cases (clic droit, ou activer le crayon pour le clic gauche)'}
+        onClick={() => {
+          setDrawMode((d) => !d);
+          setSelected(null);
+          setDrag(null);
+        }}
+      >
+        ✎
+      </button>
       {promotion && (
         <div className="promotion-modal" role="dialog" aria-label="Choix de la promotion">
           <p>Promotion en :</p>

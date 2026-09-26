@@ -40,7 +40,8 @@ describe('migration des réglages', () => {
     await d.settings.put({ id: 'settings', theme: 'bluered', liveComments: 'descriptive' } as never);
     const s = await loadSettings(d);
     expect(s.liveComments).toBe('full');
-    expect(s.settingsVersion).toBe(2);
+    expect(s.settingsVersion).toBe(3);
+    expect(s.showEvalBar).toBe(true);
     await d.settings.put({ ...s, liveComments: 'descriptive' });
     expect((await loadSettings(d)).liveComments).toBe('descriptive'); // choix explicite conservé ensuite
   });

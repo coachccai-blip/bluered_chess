@@ -55,6 +55,7 @@ export function Play() {
   const [pendingMove, setPendingMove] = useState<{ move: { from: Square; to: Square; promotion?: 'q' | 'r' | 'b' | 'n' }; risk: MoveRisk } | null>(null);
   const [avoided, setAvoided] = useState(0);
   const [planTarget, setPlanTarget] = useState<string | undefined>();
+  const [drawMode, setDrawMode] = useState(false);
   const [comment, setComment] = useState<string | null>(null);
   const speechStatus = useSpeechStatus();
   const commentJob = useRef(0);
@@ -348,6 +349,8 @@ export function Play() {
             hatching={settings.hatching}
             attackOptions={attackOptions}
             animations={settings.animations}
+            drawMode={drawMode}
+            onDrawModeChange={setDrawMode}
           />
         </div>
         <PlayerBar color={g.flipped ? (botColor ?? 'b') : g.playerColor} name={g.flipped ? (vsBot ? `${botProfile.name} (${g.botElo})` : colorLabel('b', palette)) : vsBot ? `Moi (${playerLabel})` : colorLabel('w', palette)} palette={palette} active={turn === (g.flipped ? (botColor ?? 'b') : g.playerColor) && !g.status.over} thinking={g.flipped && g.botThinking} fen={viewedFen} />
@@ -364,7 +367,7 @@ export function Play() {
             )}
           </div>
         )}
-        <HeatmapToolbar mode={g.heatmapMode} onChange={g.setHeatmapMode} />
+        <HeatmapToolbar mode={g.heatmapMode} onChange={g.setHeatmapMode} drawMode={drawMode} onDrawModeChange={setDrawMode} />
       </div>
       <aside className="side-panel">
         <div className="card">
@@ -396,6 +399,18 @@ export function Play() {
             <button type="button" className="btn btn-sm" onClick={() => g.setFlipped(!g.flipped)} title="Retourner l'échiquier">
               Retourner
             </button>
+            {g.mode !== 'exercise' && (
+              <button
+                type="button"
+                className={`btn btn-sm ${settings.blunderCheck !== 'off' ? '' : 'btn-ghost'}`}
+                data-testid="blundercheck-toggle"
+                aria-pressed={settings.blunderCheck !== 'off'}
+                title="Filet anti-gaffe : demander confirmation avant un coup dangereux"
+                onClick={() => void useSettings.getState().update({ blunderCheck: settings.blunderCheck === 'off' ? 'blunders' : 'off' })}
+              >
+                {settings.blunderCheck !== 'off' ? 'Es-tu sûr ? : activé' : 'Es-tu sûr ? : coupé'}
+              </button>
+            )}
             {g.mode !== 'exercise' && (
               <button type="button" className={`btn btn-sm ${settings.showEvalBar ? '' : 'btn-ghost'}`} data-testid="evalbar-toggle" aria-pressed={settings.showEvalBar} onClick={() => void useSettings.getState().update({ showEvalBar: !settings.showEvalBar })} title="Afficher ou masquer la barre d'évaluation (qui a l'avantage)">
                 {settings.showEvalBar ? 'Masquer la barre' : 'Barre d\'avantage'}
@@ -486,7 +501,7 @@ export function Play() {
 
       <Toast text={toast} onDone={() => setToast(null)} />
       {pendingMove && (
-        <Modal title="Attends, es-tu sûr ?" onClose={() => setPendingMove(null)}>
+        <Modal title="Attends, es-tu sûr ?">
           <div className="stack" data-testid="blunder-check">
             <p>
               {pendingMove.risk.severity === 'mate' ? 'Danger de mat : ' : 'Ce coup semble risqué : '}

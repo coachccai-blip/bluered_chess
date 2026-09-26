@@ -233,3 +233,43 @@ test('révisions du jour et mode devine le coup après une partie analysée', as
   await page.goto('#/entrainement');
   await expect(page.getByTestId('drills')).toContainText('Réviser');
 });
+
+test.describe('écran tactile', () => {
+  test.use({ hasTouch: true, viewport: { width: 420, height: 900 } });
+
+  test('la fenêtre « es-tu sûr ? » reste ouverte après un toucher et se valide', async ({ page }) => {
+    await skipOnboarding(page);
+    await page.goto('#/partie');
+    await page.getByTestId('mode-human').click();
+    await page.getByTestId('start-game').click();
+    const tap = async (sq: string) => {
+      const b = await page.locator(`[data-square="${sq}"]`).boundingBox();
+      await page.touchscreen.tap(b!.x + b!.width / 2, b!.y + b!.height / 2);
+    };
+    for (const [f, t] of [['e2', 'e4'], ['e7', 'e5'], ['g1', 'f3'], ['d7', 'd6']]) {
+      await tap(f);
+      await tap(t);
+    }
+    await tap('f3');
+    await tap('e5'); // Cxe5?? : la fenêtre s'ouvre sous le doigt et ne doit pas se refermer seule
+    await expect(page.getByTestId('blunder-check')).toBeVisible();
+    await page.waitForTimeout(600);
+    await expect(page.getByTestId('blunder-check')).toBeVisible();
+    await page.getByTestId('blunder-play').tap();
+    await expect(page.getByTestId('move-list')).toContainText('Nxe5');
+  });
+
+  test('mode dessin depuis la barre des modes, bascule du filet', async ({ page }) => {
+    await skipOnboarding(page);
+    await page.goto('#/partie');
+    await page.getByTestId('mode-human').click();
+    await page.getByTestId('start-game').click();
+    await page.getByTestId('toolbar-draw').tap();
+    const b = await page.locator('[data-square="e4"]').boundingBox();
+    await page.touchscreen.tap(b!.x + b!.width / 2, b!.y + b!.height / 2);
+    await expect(page.locator('[data-usermark="e4"]')).toHaveCount(1);
+    await page.getByTestId('toolbar-draw').tap();
+    await page.getByTestId('blundercheck-toggle').tap();
+    await expect(page.getByTestId('blundercheck-toggle')).toContainText('coupé');
+  });
+});

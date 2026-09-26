@@ -172,6 +172,21 @@ export function SettingsScreen() {
       </div>
       <div className="card">
         <h3>Partie et analyse</h3>
+        <label className="field">
+          <span>Filet anti-gaffe : demander confirmation avant un coup dangereux</span>
+          <div className="segmented" role="radiogroup" aria-label="Filet anti-gaffe">
+            {([
+              ['off', 'Désactivé'],
+              ['blunders', 'Gaffes graves'],
+              ['all', 'Tout'],
+            ] as const).map(([k, label]) => (
+              <button key={k} type="button" role="radio" aria-checked={settings.blunderCheck === k} className={settings.blunderCheck === k ? 'active' : ''} onClick={() => void update({ blunderCheck: k })}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </label>
+        <p className="muted small">« Gaffes graves » : pièce laissée en prise, capture perdante ou mat en 1 permis. « Tout » ajoute les pions. Désactive-le quand tu n'en as plus besoin : c'est une roulette d'apprentissage.</p>
         <Toggle k="allowUndo" label="Autoriser « Annuler » contre les bots" />
         <Toggle k="showEvalBar" label="Barre d'avantage à gauche de l'échiquier pendant la partie (aide visible ; masquable d'un clic)" />
         <label className="field">

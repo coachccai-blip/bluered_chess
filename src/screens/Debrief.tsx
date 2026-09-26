@@ -22,6 +22,10 @@ import type { HeatmapMode } from '../board/ThreatOverlay';
 import type { Square } from '../chess/types';
 import { Ring } from '../ui/Ring';
 import { EvalBarVertical } from '../ui/EvalBarVertical';
+import { fastMistakes } from '../progress/goals';
+import { classifyMove, CATEGORY_LABEL as CAT } from '../analysis/classify';
+import { winProbability } from '../analysis/winprob';
+import { lineScore } from '../engine/engineClient';
 import { bestLineText, commentForMove, explainBest } from '../analysis/explain';
 import { openingAnnouncement, openingForGame, openingLabel } from '../chess/openings';
 import { speak, stopSpeaking } from '../ui/speech';
@@ -41,6 +45,11 @@ export function Debrief({ id }: { id: string }) {
   const { settings, palette } = useSettings();
   const running = useRef(false);
   const [reading, setReading] = useState(false);
+  /** Mode « Devine le coup ». */
+  const [guessMode, setGuessMode] = useState(false);
+  const [guessScore, setGuessScore] = useState({ ok: 0, total: 0 });
+  const [guessFeedback, setGuessFeedback] = useState<string | null>(null);
+  const [guessBusy, setGuessBusy] = useState(false);
   const readingRef = useRef(false);
 
   useEffect(() => {
@@ -118,6 +127,54 @@ export function Debrief({ id }: { id: string }) {
     return prefix + commentForMove(m, playerColor);
   };
   const commentText = ply > 0 ? commentAt(ply) : null;
+  const fast = analysis && game ? fastMistakes(analysis, game.thinkTimes, playerColor) : null;
+  // Devine le coup : position avant un coup du joueur, échiquier jouable, verdict du moteur sur la proposition.
+  const guessTarget = guessMode && ply < moves.length && moves[ply]?.color === playerColor ? moves[ply] : null;
+  const onGuess = async (m: { from: Square; to: Square; promotion?: 'q' | 'r' | 'b' | 'n' }) => {
+    if (!guessTarget || !engine) return;
+    const lan = `${m.from}${m.to}${m.promotion ?? ''}`;
+    setGuessBusy(true);
+    try {
+      let text: string;
+      let ok = false;
+      if (lan === guessTarget.bestMoveLan) {
+        ok = true;
+        text = `Bravo ! ${guessTarget.bestMove} est exactement le meilleur coup.`;
+      } else {
+        const { applyMove } = await import('../chess/game');
+        const after = applyMove(guessTarget.fenBefore, m, guessTarget.ply);
+        if (!after) throw new Error('coup illégal');
+        const r = await engine.analyze(after.fen, { depth: settings.analysisDepth >= 14 ? 12 : 10 });
+        const l = r.lines[0];
+        const stm = after.fen.split(' ')[1] === 'w' ? 1 : -1;
+        const cpWhite = l ? lineScore(l) * stm : 0;
+        const sign = playerColor === 'w' ? 1 : -1;
+        const loss = Math.max(0, winProbability(guessTarget.evalBefore * sign) - winProbability(cpWhite * sign));
+        const cat = classifyMove({ winProbLoss: loss, isBest: false, isOnlyMove: false, mateAvailableBefore: null, mateStillAvailableAfter: false });
+        ok = cat === 'excellent' || cat === 'good';
+        const same = lan === guessTarget.lan ? ' (c\'est le coup que tu avais joué)' : '';
+        text = `${after.record.san}${same} : ${CAT[cat].toLowerCase()}. Le moteur préférait ${guessTarget.bestMove}.`;
+      }
+      setGuessScore((s) => ({ ok: s.ok + (ok ? 1 : 0), total: s.total + 1 }));
+      setGuessFeedback(text);
+      if (settings.voiceEnabled) void speak(text, { voiceName: settings.voiceName, rate: settings.voiceRate });
+    } catch (e) {
+      setGuessFeedback((e as Error).message);
+    } finally {
+      setGuessBusy(false);
+    }
+  };
+  const nextGuess = () => {
+    setGuessFeedback(null);
+    // Prochaine position où c'est au joueur de jouer.
+    for (let i = ply + 1; i < moves.length; i++) {
+      if (moves[i].color === playerColor) {
+        setPly(i);
+        return;
+      }
+    }
+    setGuessMode(false);
+  };
   const explanation = currentMove ? explainBest(currentMove, currentMove.color === playerColor) : null;
   const lineText = currentMove ? bestLineText(currentMove) : null;
 
@@ -238,6 +295,16 @@ export function Debrief({ id }: { id: string }) {
             <p className="small">
               <strong>Faiblesse :</strong> {analysis.summary.weakness}
             </p>
+            {game.goal && (
+              <p className="small" data-testid="goal-result">
+                <span className={`tag ${game.goal.achieved ? 'tag-ok' : 'tag-alert'}`}>{game.goal.achieved ? 'Objectif atteint' : 'Objectif manqué'}</span> {game.goal.label}. {game.goal.detail}
+              </p>
+            )}
+            {fast && fast.total > 0 && (
+              <p className="small" data-testid="fast-mistakes">
+                <span className={`tag ${fast.fast > 0 ? 'tag-alert' : 'tag-ok'}`}>Réflexion</span> {fast.fast} de tes {fast.total} erreur{fast.total > 1 ? 's' : ''} {fast.fast > 1 ? 'ont été jouées' : 'a été jouée'} en moins de 3 secondes.{fast.fast > 0 ? ' Prends le temps de vérifier les pièces en prise avant de jouer.' : ' Bonne discipline de réflexion.'}
+              </p>
+            )}
           </div>
           <div className="card">
             <h3>Évaluation</h3>
@@ -251,10 +318,11 @@ export function Debrief({ id }: { id: string }) {
           <div className="board-row">
           {settings.showEvalBar && moves.length > 0 && <EvalBarVertical cp={ply === 0 ? moves[0]?.evalBefore ?? 0 : (moves[ply - 1]?.evalAfter ?? null)} flipped={playerColor === 'b'} palette={palette} />}
           <Board
-            fen={boardFen}
+            fen={guessTarget ? guessTarget.fenBefore : boardFen}
             flipped={playerColor === 'b'}
-            movable={[]}
-            arrows={arrows}
+            movable={guessTarget && !guessFeedback && !guessBusy ? [playerColor] : []}
+            onMove={(m) => void onGuess(m)}
+            arrows={guessTarget && !guessFeedback ? [] : arrows}
             heatmapMode={heat}
             palette={palette}
             intensity={settings.heatmapIntensity}
@@ -283,6 +351,39 @@ export function Debrief({ id }: { id: string }) {
             </button>
           </div>
           {analysis && (
+            <div className="card" style={{ marginTop: '.5rem', borderColor: guessMode ? 'var(--accent)' : undefined }} data-testid="guess-panel">
+              <div className="row spread">
+                <strong>Devine le coup</strong>
+                <span className="muted small">{guessScore.total > 0 ? `${guessScore.ok} / ${guessScore.total} bons coups` : 'à chaque position, propose ton coup avant de voir le tien'}</span>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${guessMode ? '' : 'btn-primary'}`}
+                  data-testid="guess-toggle"
+                  onClick={() => {
+                    setGuessFeedback(null);
+                    if (!guessMode) {
+                      setGuessMode(true);
+                      const first = moves.findIndex((m) => m.color === playerColor);
+                      if (first >= 0) setPly(first);
+                    } else setGuessMode(false);
+                  }}
+                >
+                  {guessMode ? 'Quitter' : 'Commencer'}
+                </button>
+              </div>
+              {guessMode && guessTarget && !guessFeedback && <p className="small" style={{ margin: '.4rem 0 0' }}>{guessBusy ? 'Le moteur évalue ta proposition…' : `Coup ${Math.ceil(guessTarget.ply / 2)} : à toi de jouer. Trouve le meilleur coup.`}</p>}
+              {guessMode && !guessTarget && !guessFeedback && <p className="small muted" style={{ margin: '.4rem 0 0' }}>Avance jusqu'à une position où c'est à toi de jouer.</p>}
+              {guessFeedback && (
+                <div className="row" style={{ marginTop: '.4rem' }}>
+                  <span className="small" data-testid="guess-feedback">{guessFeedback}</span>
+                  <button type="button" className="btn btn-sm btn-primary" onClick={nextGuess}>
+                    Position suivante
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {analysis && (
             <div className="btn-row" style={{ justifyContent: 'center', marginTop: '.5rem' }}>
               <button type="button" className={`btn btn-sm ${reading ? 'btn-danger' : 'btn-primary'}`} data-testid="read-game" onClick={() => void readWholeGame()}>
                 {reading ? 'Arrêter la lecture' : '🔊 Lire la partie coup par coup'}
@@ -307,6 +408,9 @@ export function Debrief({ id }: { id: string }) {
                   {formatEval(currentMove.evalBefore)} → {formatEval(currentMove.evalAfter)}
                 </span>
                 {currentMove.bestMove && currentMove.bestMove !== currentMove.san && <span className="small">Mieux : {currentMove.bestMove}</span>}
+                {game.thinkTimes?.[currentMove.ply - 1] !== undefined && currentMove.color === playerColor && (
+                  <span className="muted small" title="Temps de réflexion">{game.thinkTimes[currentMove.ply - 1] < 3000 ? '⚡ ' : '⏱ '}{(game.thinkTimes[currentMove.ply - 1] / 1000).toFixed(0)} s</span>
+                )}
               </div>
               {currentMove.motifs.length > 0 && (
                 <div className="row" style={{ marginTop: '.3rem' }}>

@@ -24,6 +24,8 @@ export interface MoveRecord {
   ply: number; // 1 = premier coup des Blancs
   check: boolean;
   mate: boolean;
+  /** Temps de réflexion avant ce coup (ms), renseigné par le store. */
+  thinkMs?: number;
 }
 
 export type GameStatus =

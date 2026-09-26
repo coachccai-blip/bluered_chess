@@ -89,6 +89,14 @@ françaises. Les fichiers moteur (`public/tts/ort/`, `public/tts/piper/`, ~33 Mo
 exclus du pré-cache et mis en cache à la demande (Workbox CacheFirst). Les modèles viennent de huggingface.co
 (`diffusionstudio/piper-voices`). `speak()` utilise la voix HD active, sinon la voix du navigateur.
 
+**Apprentissage en jouant.** `analysis/risk.ts` : filet anti-gaffe (`assessMoveRisk`, réglage `blunderCheck` off / blunders / all)
+qui demande confirmation avant un coup laissant une pièce en prise, une capture perdante ou un mat en 1 (jamais en mode exercice).
+`progress/drills.ts` : répétition espacée des erreurs (table Dexie `drills`, boîtes de Leitner 1/3/7/14/30 jours, créées à
+l'enregistrement d'une analyse, résultat enregistré au premier essai en mode exercice via `exerciseDrillId`). `progress/goals.ts` :
+objectif de partie tiré du plan (`goalFor`, `evaluateGoal`) stocké sur la partie et vérifié à l'analyse ; `fastMistakes` compte les
+erreurs jouées en moins de 3 s (temps par coup `thinkMs` dans les enregistrements, `thinkTimes` sur la partie). Débrief : mode
+« Devine le coup » (échiquier jouable aux positions du joueur, proposition notée par le moteur).
+
 **Profil et plan (section 8).** Indicateurs sur les 20 dernières parties : pièces pendantes (> 3/100 coups),
 tactiques ratées (> 4/100), sécurité du roi (> 20 % des parties), finales (< 75 % précision), ouverture (< 85 %),
 cases rouges (> 5/100), gestion de l'avantage (> 25 %). Plan = 2 indicateurs les plus faibles × 3 exercices,

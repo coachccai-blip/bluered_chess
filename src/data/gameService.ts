@@ -1,6 +1,8 @@
 // Orchestration : enregistrer une partie, mettre à jour le profil, l'Elo et le plan.
 import { db, loadProfile, saveProfile } from './db';
-import { newId, type Analysis, type Game, type GameResult, type Profile, type TrainingPlan } from './models';
+import { newId, type Analysis, type Drill, type Game, type GameGoal, type GameResult, type Profile, type TrainingPlan } from './models';
+import { drillsFromAnalysis, nextReview } from '../progress/drills';
+import { evaluateGoal } from '../progress/goals';
 import { buildPgn, START_FEN } from '../chess/game';
 import { recommendBot, updateElo, updateStreak } from '../progress/elo';
 import { computeIndicators, resultScore } from '../progress/profile';
@@ -18,6 +20,7 @@ export interface FinishedGameInput {
   endReason?: string;
   startedAt: number;
   mode: 'bot' | 'human' | 'exercise';
+  goal?: GameGoal | null;
 }
 
 export async function saveFinishedGame(input: FinishedGameInput): Promise<Game> {
@@ -45,6 +48,8 @@ export async function saveFinishedGame(input: FinishedGameInput): Promise<Game> 
     sans,
     durationSec: Math.round((Date.now() - input.startedAt) / 1000),
     imported: input.mode !== 'bot',
+    thinkTimes: input.records.map((r) => r.thinkMs ?? 0),
+    goal: input.goal ?? undefined,
   };
   if (input.mode === 'bot' && input.result !== '*' && input.startFen === START_FEN) {
     const score = resultScore(game);
@@ -99,7 +104,12 @@ export async function saveAnalysis(game: Game, analysis: GameAnalysis): Promise<
     summary: analysis.summary,
   };
   await db.analyses.add(a);
-  await db.games.update(game.id, { analysisId: a.id });
+  const patch: Partial<Game> = { analysisId: a.id };
+  if (game.goal) patch.goal = evaluateGoal(game.goal, game, a);
+  await db.games.update(game.id, patch);
+  // Fiches de répétition espacée pour chaque erreur du joueur.
+  const drills = drillsFromAnalysis(game, a);
+  if (drills.length) await db.drills.bulkAdd(drills);
   await refreshProfileAndPlan();
   return a;
 }
@@ -132,9 +142,20 @@ export async function refreshProfileAndPlan(): Promise<{ profile: Profile; plan:
 }
 
 export async function deleteGame(id: string): Promise<void> {
-  await db.transaction('rw', db.games, db.analyses, async () => {
+  await db.transaction('rw', db.games, db.analyses, db.drills, async () => {
     await db.analyses.where('gameId').equals(id).delete();
+    await db.drills.where('gameId').equals(id).delete();
     await db.games.delete(id);
   });
   await refreshProfileAndPlan();
+}
+
+/** Enregistre le résultat d'une révision et planifie la suivante. */
+export async function recordDrillResult(id: string, ok: boolean): Promise<Drill | undefined> {
+  const d = await db.drills.get(id);
+  if (!d) return undefined;
+  const { box, due } = nextReview(d.box, ok);
+  const next: Drill = { ...d, box, due, attempts: d.attempts + 1, successes: d.successes + (ok ? 1 : 0) };
+  await db.drills.put(next);
+  return next;
 }

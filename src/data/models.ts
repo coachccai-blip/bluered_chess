@@ -21,6 +21,36 @@ export interface Game {
   imported?: boolean;
   eloBefore?: number;
   eloAfter?: number;
+  /** Temps de réflexion par demi-coup (ms). */
+  thinkTimes?: number[];
+  /** Objectif de la partie (tiré du plan), vérifié à l'analyse. */
+  goal?: GameGoal;
+}
+
+export interface GameGoal {
+  key: string;
+  label: string;
+  achieved?: boolean;
+  detail?: string;
+}
+
+/** Fiche de répétition espacée : une position d'erreur à retrouver. */
+export interface Drill {
+  id: string;
+  gameId: string;
+  ply: number;
+  fen: string;
+  bestMove: string;
+  bestMoveLan: string;
+  playedSan: string;
+  motif: string | null;
+  category: string;
+  /** Boîte de Leitner (0 = à revoir demain). */
+  box: number;
+  due: number;
+  attempts: number;
+  successes: number;
+  createdAt: number;
 }
 
 export interface Analysis {
@@ -105,6 +135,8 @@ export interface Settings {
   settingsVersion?: number;
   /** Lecture automatique des commentaires dans le débrief. */
   autoReadDebrief: boolean;
+  /** Filet anti-gaffe : demande confirmation avant un coup dangereux. */
+  blunderCheck: 'off' | 'blunders' | 'all';
   defaultHeatmapMode: 'A' | 'B' | 'R' | 'C' | 'P' | 'H' | 'X';
   ignorePinned: boolean;
   xray: boolean;
@@ -135,6 +167,7 @@ export const DEFAULT_SETTINGS: Settings = {
   liveComments: 'full',
   settingsVersion: 3,
   autoReadDebrief: true,
+  blunderCheck: 'blunders',
   defaultHeatmapMode: 'A',
   ignorePinned: false,
   xray: false,

@@ -1,6 +1,6 @@
 // Export / import JSON et PGN (section 10). Fusion par identifiant, doublons ignorés.
 import type { BlueRedDB } from './db';
-import type { Analysis, Game, Profile, Settings, TrainingPlan } from './models';
+import type { Analysis, Drill, Game, Profile, Settings, TrainingPlan } from './models';
 
 export interface BackupFile {
   app: 'bluered-chess';
@@ -11,15 +11,17 @@ export interface BackupFile {
   profile: Profile | null;
   plans: TrainingPlan[];
   settings: Omit<Settings, 'apiKey'> | null;
+  drills?: Drill[];
 }
 
 export async function exportBackup(db: BlueRedDB): Promise<BackupFile> {
-  const [games, analyses, profile, plans, settings] = await Promise.all([
+  const [games, analyses, profile, plans, settings, drills] = await Promise.all([
     db.games.toArray(),
     db.analyses.toArray(),
     db.profile.get('me'),
     db.plans.toArray(),
     db.settings.get('settings'),
+    db.drills.toArray(),
   ]);
   let safeSettings: BackupFile['settings'] = null;
   if (settings) {
@@ -27,7 +29,7 @@ export async function exportBackup(db: BlueRedDB): Promise<BackupFile> {
     void _omit;
     safeSettings = rest;
   }
-  return { app: 'bluered-chess', version: 1, exportedAt: Date.now(), games, analyses, profile: profile ?? null, plans, settings: safeSettings };
+  return { app: 'bluered-chess', version: 1, exportedAt: Date.now(), games, analyses, profile: profile ?? null, plans, settings: safeSettings, drills };
 }
 
 export interface ImportReport {
@@ -47,7 +49,7 @@ export function validateBackup(data: unknown): data is BackupFile {
 /** Import avec fusion : rien n'est écrasé, les identifiants déjà présents sont ignorés. */
 export async function importBackup(db: BlueRedDB, data: BackupFile): Promise<ImportReport> {
   const report: ImportReport = { gamesAdded: 0, analysesAdded: 0, plansAdded: 0, profileMerged: false, skipped: 0 };
-  await db.transaction('rw', db.games, db.analyses, db.profile, db.plans, async () => {
+  await db.transaction('rw', db.games, db.analyses, db.profile, db.plans, db.drills, async () => {
     const existingGames = new Set((await db.games.toCollection().primaryKeys()) as string[]);
     const existingAnalyses = new Set((await db.analyses.toCollection().primaryKeys()) as string[]);
     const existingPlans = new Set((await db.plans.toCollection().primaryKeys()) as string[]);
@@ -66,6 +68,11 @@ export async function importBackup(db: BlueRedDB, data: BackupFile): Promise<Imp
       }
       await db.analyses.add(a);
       report.analysesAdded++;
+    }
+    const existingDrills = new Set((await db.drills.toCollection().primaryKeys()) as string[]);
+    for (const d of data.drills ?? []) {
+      if (existingDrills.has(d.id)) continue;
+      await db.drills.add(d);
     }
     for (const p of data.plans ?? []) {
       if (existingPlans.has(p.id)) {

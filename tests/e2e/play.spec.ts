@@ -7,9 +7,14 @@ async function skipOnboarding(page: Page) {
   await page.getByTestId('level-800').click();
 }
 
-async function move(page: Page, from: string, to: string) {
+async function move(page: Page, from: string, to: string, confirmRisky = true) {
   await page.locator(`[data-square="${from}"]`).click({ force: true });
   await page.locator(`[data-square="${to}"]`).click({ force: true });
+  // Filet anti-gaffe : les tests jouent volontairement des coups douteux, on confirme.
+  if (confirmRisky) {
+    const play = page.getByTestId('blunder-play');
+    if (await play.isVisible({ timeout: 300 }).catch(() => false)) await play.click();
+  }
 }
 
 test('partie humain contre humain jusqu\'au mat, heatmap et sauvegarde', async ({ page }) => {
@@ -183,4 +188,40 @@ test('flèches et cases marquées comme sur chess.com', async ({ page }) => {
   // Le jeu fonctionne toujours après désactivation du crayon.
   await move(page, 'e2', 'e4');
   await expect(page.getByTestId('move-list')).toContainText('e4');
+});
+
+test('filet anti-gaffe : confirmation avant un coup qui perd du matériel', async ({ page }) => {
+  await skipOnboarding(page);
+  await page.goto('#/partie');
+  await page.getByTestId('mode-human').click();
+  await page.getByTestId('start-game').click();
+  for (const [f, t] of [['e2', 'e4'], ['e7', 'e5'], ['g1', 'f3'], ['d7', 'd6']]) await move(page, f, t);
+  // Cxe5?? perd le cavalier contre un pion : le coach demande confirmation.
+  await move(page, 'f3', 'e5', false);
+  await expect(page.getByTestId('blunder-check')).toBeVisible();
+  await page.getByTestId('blunder-rethink').click();
+  await expect(page.getByTestId('move-list')).not.toContainText('Nxe5');
+  await move(page, 'f3', 'e5', false);
+  await page.getByTestId('blunder-play').click();
+  await expect(page.getByTestId('move-list')).toContainText('Nxe5');
+});
+
+test('révisions du jour et mode devine le coup après une partie analysée', async ({ page }) => {
+  await skipOnboarding(page);
+  await page.goto('#/partie');
+  await page.getByTestId('mode-human').click();
+  await page.getByTestId('start-game').click();
+  // Mat du berger subi par le Bleu ? Non : le Bleu (joueur) fait des erreurs : 1.e4 e5 2.Qh5 Nc6 3.Bc4 Nf6 4.Qxf7# — le joueur est Bleu et gagne ; jouons plutôt une gaffe du Bleu : 1.f3 e5 2.g4 Qh4#.
+  for (const [f, t] of [['f2', 'f3'], ['e7', 'e5'], ['g2', 'g4']]) await move(page, f, t);
+  await move(page, 'd8', 'h4');
+  await expect(page.getByTestId('status')).toContainText('Échec et mat');
+  await page.getByTestId('go-debrief').click();
+  await expect(page.getByTestId('accuracy')).toBeVisible({ timeout: 90_000 });
+  // Devine le coup : proposer 1.e4 à la place de 1.f3.
+  await page.getByTestId('guess-toggle').click();
+  await move(page, 'e2', 'e4');
+  await expect(page.getByTestId('guess-feedback')).toBeVisible({ timeout: 30_000 });
+  // Fiches de révision créées pour les erreurs du Bleu.
+  await page.goto('#/entrainement');
+  await expect(page.getByTestId('drills')).toContainText('Réviser');
 });

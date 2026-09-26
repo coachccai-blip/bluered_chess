@@ -1,6 +1,6 @@
 // IndexedDB via Dexie : seule mémoire de l'application.
 import Dexie, { type Table } from 'dexie';
-import type { Analysis, Game, Profile, Settings, TrainingPlan } from './models';
+import type { Analysis, Drill, Game, Profile, Settings, TrainingPlan } from './models';
 import { DEFAULT_PROFILE, DEFAULT_SETTINGS } from './models';
 
 export class BlueRedDB extends Dexie {
@@ -9,6 +9,7 @@ export class BlueRedDB extends Dexie {
   profile!: Table<Profile, string>;
   plans!: Table<TrainingPlan, string>;
   settings!: Table<Settings, string>;
+  drills!: Table<Drill, string>;
 
   constructor(name = 'bluered-chess') {
     super(name);
@@ -18,6 +19,14 @@ export class BlueRedDB extends Dexie {
       profile: 'id',
       plans: 'id, generatedAt',
       settings: 'id',
+    });
+    this.version(2).stores({
+      games: 'id, createdAt, botElo, result, playerColor',
+      analyses: 'id, gameId, createdAt',
+      profile: 'id',
+      plans: 'id, generatedAt',
+      settings: 'id',
+      drills: 'id, gameId, due, box',
     });
   }
 }

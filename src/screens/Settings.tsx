@@ -156,7 +156,7 @@ export function SettingsScreen() {
             ))}
           </div>
         </label>
-        <p className="muted small">« Descriptifs » décrit le coup et les pièces en prise (ce que la heatmap montre déjà). « Avec avis » ajoute le jugement du moteur sur tes coups et le coup meilleur, ce qui aide l'apprentissage mais revient à jouer avec une aide.</p>
+        <p className="muted small">« Avec avis » (par défaut) : après chacun de tes coups, le coach lit son jugement, le coup meilleur et pourquoi il est meilleur. « Descriptifs » se limite au coup joué et aux pièces en prise (ce que la heatmap montre déjà), pour jouer sans aide.</p>
         <Toggle k="autoReadDebrief" label="Lire automatiquement chaque coup dans le débrief" />
         <div className="btn-row" style={{ marginTop: '.5rem' }}>
           <button type="button" className="btn btn-sm" onClick={() => void speak('Bonjour ! Je suis ton coach. Tu joues Cavalier f3 : bon coup, il développe une pièce et contrôle le centre.', { rate: settings.voiceRate })}>

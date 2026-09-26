@@ -26,7 +26,14 @@ export const db = new BlueRedDB();
 
 export async function loadSettings(database: BlueRedDB = db): Promise<Settings> {
   const s = await database.settings.get('settings');
-  return { ...DEFAULT_SETTINGS, ...(s ?? {}) };
+  const merged: Settings = { ...DEFAULT_SETTINGS, ...(s ?? {}) };
+  // Migration v2 : le coach lit aussi son avis et l'explication du coup « Mieux » pendant la partie.
+  if ((s?.settingsVersion ?? 1) < 2) {
+    merged.liveComments = 'full';
+    merged.settingsVersion = 2;
+    await database.settings.put(merged);
+  }
+  return merged;
 }
 
 export async function saveSettings(s: Settings, database: BlueRedDB = db): Promise<void> {

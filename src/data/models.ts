@@ -101,6 +101,8 @@ export interface Settings {
   voiceRate: number;
   /** Commentaires en direct pendant la partie : off, descriptif (faits visibles), complet (avec avis du moteur). */
   liveComments: 'off' | 'descriptive' | 'full';
+  /** Version du schéma des réglages (migrations dans loadSettings). */
+  settingsVersion?: number;
   /** Lecture automatique des commentaires dans le débrief. */
   autoReadDebrief: boolean;
   defaultHeatmapMode: 'A' | 'B' | 'R' | 'C' | 'P' | 'H' | 'X';
@@ -130,7 +132,8 @@ export const DEFAULT_SETTINGS: Settings = {
   analysisDepth: typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent) ? 12 : 16,
   voiceEnabled: true,
   voiceRate: 1,
-  liveComments: 'descriptive',
+  liveComments: 'full',
+  settingsVersion: 2,
   autoReadDebrief: true,
   defaultHeatmapMode: 'A',
   ignorePinned: false,

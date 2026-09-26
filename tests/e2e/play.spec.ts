@@ -232,6 +232,33 @@ test('révisions du jour et mode devine le coup après une partie analysée', as
   // Fiches de révision créées pour les erreurs du Bleu.
   await page.goto('#/entrainement');
   await expect(page.getByTestId('drills')).toContainText('Réviser');
+  // Programme par faiblesse depuis le radar de l'accueil.
+  await page.goto('#/');
+  await expect(page.getByTestId('priority-programs')).toBeVisible();
+  await page.getByTestId('indicator-hanging').click();
+  await expect(page.getByTestId('weakness-panel')).toContainText('Méthode à appliquer en partie');
+});
+
+test('programme d\'une faiblesse : puzzles intégrés jusqu\'au mat', async ({ page }) => {
+  await skipOnboarding(page);
+  await page.goto('#/entrainement');
+  await page.getByTestId('program-tactics').click();
+  await expect(page.getByTestId('weakness-panel')).toBeVisible();
+  await page.getByTestId('weakness-panel').getByRole('button', { name: /Puzzles : mat en 1/ }).click();
+  await expect(page.getByTestId('exercise-hint')).toBeVisible();
+  // Résout le puzzle affiché en lisant sa solution dans l'état de l'échiquier.
+  const fen = await page.getByTestId('board').getAttribute('data-fen');
+  const solutions: Record<string, [string, string]> = {
+    '6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1': ['a1', 'a8'],
+    'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4': ['h5', 'f7'],
+    '6k1/pp3ppp/8/8/8/8/PP3PPP/3R2K1 w - - 0 1': ['d1', 'd8'],
+    '6rk/6pp/8/6N1/8/8/8/6K1 w - - 0 1': ['g5', 'f7'],
+  };
+  const [f, t] = solutions[fen!];
+  await move(page, f, t);
+  await expect(page.getByTestId('exercise-feedback')).toContainText('Bien joué');
+  await page.getByTestId('next-puzzle').click();
+  await expect(page.getByTestId('exercise-feedback')).toHaveCount(0);
 });
 
 test.describe('écran tactile', () => {

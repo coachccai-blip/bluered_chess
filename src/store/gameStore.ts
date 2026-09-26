@@ -23,10 +23,13 @@ export interface GameState {
   exerciseBestMove: string | null;
   /** Fiche de révision en cours (répétition espacée). */
   exerciseDrillId: string | null;
+  /** Série de puzzles intégrés en cours (thème) et indice affiché. */
+  exerciseTheme: string | null;
+  exerciseHint: string | null;
   /** Objectif de la partie. */
   goal: { key: string; label: string } | null;
   lastMoveAt: number;
-  newGame: (opts: { mode: GameMode; playerColor?: Color; botElo?: number; startFen?: string; exerciseBestMove?: string | null; exerciseDrillId?: string | null; goal?: { key: string; label: string } | null }) => void;
+  newGame: (opts: { mode: GameMode; playerColor?: Color; botElo?: number; startFen?: string; exerciseBestMove?: string | null; exerciseDrillId?: string | null; goal?: { key: string; label: string } | null; exerciseTheme?: string | null; exerciseHint?: string | null }) => void;
   playMove: (m: MoveInput | string) => MoveRecord | null;
   undo: (plies: number) => void;
   resign: () => void;
@@ -40,7 +43,7 @@ export interface GameState {
 }
 
 const STORAGE_KEY = 'bluered-current-game';
-type Persisted = Pick<GameState, 'startFen' | 'fen' | 'records' | 'mode' | 'playerColor' | 'botElo' | 'status' | 'startedAt' | 'savedGameId' | 'exerciseBestMove' | 'flipped' | 'heatmapMode'> & Partial<Pick<GameState, 'exerciseDrillId' | 'goal' | 'lastMoveAt'>>;
+type Persisted = Pick<GameState, 'startFen' | 'fen' | 'records' | 'mode' | 'playerColor' | 'botElo' | 'status' | 'startedAt' | 'savedGameId' | 'exerciseBestMove' | 'flipped' | 'heatmapMode'> & Partial<Pick<GameState, 'exerciseDrillId' | 'goal' | 'lastMoveAt' | 'exerciseTheme' | 'exerciseHint'>>;
 
 /** Relit la partie en cours depuis localStorage (survit au rechargement et à la fermeture de l'app). */
 export function loadPersistedGame(storage: Pick<Storage, 'getItem'> | null = typeof localStorage !== 'undefined' ? localStorage : null): Partial<Persisted> {
@@ -71,6 +74,8 @@ export function persistGame(state: GameState, storage: Pick<Storage, 'setItem'> 
     flipped: state.flipped,
     heatmapMode: state.heatmapMode,
     exerciseDrillId: state.exerciseDrillId,
+    exerciseTheme: state.exerciseTheme,
+    exerciseHint: state.exerciseHint,
     goal: state.goal,
     lastMoveAt: state.lastMoveAt,
   };
@@ -96,10 +101,12 @@ export const useGame = create<GameState>((set, get) => ({
   savedGameId: null,
   exerciseBestMove: null,
   exerciseDrillId: null,
+  exerciseTheme: null,
+  exerciseHint: null,
   goal: null,
   lastMoveAt: Date.now(),
   ...loadPersistedGame(),
-  newGame: ({ mode, playerColor = 'w', botElo = 1000, startFen = START_FEN, exerciseBestMove = null, exerciseDrillId = null, goal = null }) =>
+  newGame: ({ mode, playerColor = 'w', botElo = 1000, startFen = START_FEN, exerciseBestMove = null, exerciseDrillId = null, goal = null, exerciseTheme = null, exerciseHint = null }) =>
     set({
       startFen,
       fen: startFen,
@@ -114,6 +121,8 @@ export const useGame = create<GameState>((set, get) => ({
       savedGameId: null,
       exerciseBestMove,
       exerciseDrillId,
+      exerciseTheme,
+      exerciseHint,
       goal,
       lastMoveAt: Date.now(),
     }),

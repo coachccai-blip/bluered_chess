@@ -24,6 +24,8 @@ import { EvalBarVertical } from '../ui/EvalBarVertical';
 import { assessMoveRisk, type MoveRisk } from '../analysis/risk';
 import { recordDrillResult } from '../data/gameService';
 import { goalFor } from '../progress/goals';
+import { launchPuzzle } from '../progress/launchAction';
+import type { PuzzleTheme } from '../progress/puzzles';
 import { IconList, IconKnight } from '../ui/icons';
 import { describeLiveMove, spoken, explainBest } from '../analysis/explain';
 import { openingAnnouncement, openingForGame, openingLabel } from '../chess/openings';
@@ -246,10 +248,10 @@ export function Play() {
       const gs = useGame.getState();
       if (gs.mode === 'exercise' && gs.exerciseBestMove && gs.records.length === 1) {
         const best = gs.exerciseBestMove;
-        const ok = rec.san === best || rec.lan === best || lanToSan(fenBefore, best) === rec.san;
+        const ok = rec.san === best || rec.lan === best || lanToSan(fenBefore, best) === rec.san || (best.endsWith('#') && rec.mate);
         setExerciseFeedback(ok ? { ok: true, text: `Bien joué : ${rec.san} était le bon coup.` } : { ok: false, text: `${rec.san} n'est pas le meilleur coup. Le moteur préférait ${best}. Annule et réessaie, ou continue la partie.` });
         // Répétition espacée : on enregistre le premier essai seulement.
-        if (gs.exerciseDrillId) void recordDrillResult(gs.exerciseDrillId, ok).then(() => setToast(ok ? 'Fiche validée : prochaine révision plus tard' : 'Fiche à revoir demain'));
+        if (gs.exerciseDrillId && !gs.exerciseTheme) void recordDrillResult(gs.exerciseDrillId, ok).then(() => setToast(ok ? 'Fiche validée : prochaine révision plus tard' : 'Fiche à revoir demain'));
       }
     },
     [settings.sounds, commentLastMove],
@@ -440,9 +442,32 @@ export function Play() {
             </div>
           )}
           {g.mode === 'exercise' && (
-            <p className="muted small" style={{ marginTop: '.5rem' }}>
-              Exercice : trouve le meilleur coup. <a href="#/entrainement">Retour à l'entraînement</a>
-            </p>
+            <div style={{ marginTop: '.5rem' }}>
+              <p className="muted small" style={{ margin: 0 }}>
+                Exercice : trouve le meilleur coup. <a href="#/entrainement">Retour à l'entraînement</a>
+              </p>
+              {g.exerciseHint && (
+                <p className="small" style={{ margin: '.3rem 0 0' }} data-testid="exercise-hint">
+                  <span className="tag tag-accent">Indice</span> {g.exerciseHint}
+                </p>
+              )}
+              {g.exerciseTheme && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  style={{ marginTop: '.5rem' }}
+                  data-testid="next-puzzle"
+                  onClick={() => {
+                    botJob.current++;
+                    stopSpeaking();
+                    setExerciseFeedback(null);
+                    launchPuzzle(g.exerciseTheme as PuzzleTheme, g.exerciseDrillId ?? undefined);
+                  }}
+                >
+                  Puzzle suivant
+                </button>
+              )}
+            </div>
           )}
         </div>
         {settings.liveComments !== 'off' && (

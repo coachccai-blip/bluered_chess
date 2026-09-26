@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useOnline } from './installPrompt';
 
 const NAV: { key: string; label: string; hash: string; icon: string }[] = [
   { key: 'home', label: 'Accueil', hash: '#/', icon: '⌂' },
@@ -9,6 +10,7 @@ const NAV: { key: string; label: string; hash: string; icon: string }[] = [
 ];
 
 export function Layout({ route, children }: { route: string; children: ReactNode }) {
+  const online = useOnline();
   return (
     <div className="app">
       <header className="topbar">
@@ -16,6 +18,9 @@ export function Layout({ route, children }: { route: string; children: ReactNode
           <span className="brand-blue">Blue</span>
           <span className="brand-red">Red</span> Chess
         </a>
+        <span className={`net ${online ? 'net-on' : 'net-off'}`} title={online ? 'En ligne' : 'Hors ligne : tout fonctionne, les mises à jour attendront'} data-testid="net-status">
+          {online ? 'en ligne' : 'hors ligne'}
+        </span>
         <nav className="nav">
           {NAV.map((n) => (
             <a key={n.key} href={n.hash} className={`nav-link ${route === n.key || (n.key === 'history' && route === 'debrief') ? 'active' : ''}`}>

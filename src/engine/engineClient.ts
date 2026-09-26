@@ -63,13 +63,24 @@ export class EngineClient {
   private busy = false;
   private ready: Promise<void>;
   private resolveReady!: () => void;
+  private rejectReady!: (e: Error) => void;
   private current: { lines: Map<number, EngineLine>; job: Job } | null = null;
   private lastOptions: Record<string, string | number | boolean> = {};
   private listeners = new Set<(line: string) => void>();
   private disposed = false;
 
-  constructor(private transport: EngineTransport) {
-    this.ready = new Promise((r) => (this.resolveReady = r));
+  constructor(
+    private transport: EngineTransport,
+    startupTimeoutMs = 30_000,
+  ) {
+    this.ready = new Promise((r, j) => {
+      this.resolveReady = r;
+      this.rejectReady = j;
+    });
+    this.ready.catch(() => {});
+    // Si le moteur ne répond pas (fichier absent du cache, WebAssembly bloqué), on signale l'échec.
+    const timer = setTimeout(() => this.rejectReady(new Error('Le moteur ne répond pas (fichiers absents ou WebAssembly indisponible).')), startupTimeoutMs);
+    this.ready.then(() => clearTimeout(timer), () => clearTimeout(timer));
     transport.onMessage((line) => this.handle(line));
     transport.postMessage('uci');
   }
@@ -111,7 +122,13 @@ export class EngineClient {
   private async pump() {
     if (this.busy || this.queue.length === 0) return;
     this.busy = true;
-    await this.ready;
+    try {
+      await this.ready;
+    } catch (e) {
+      this.busy = false;
+      this.queue.splice(0).forEach((j) => j.reject(e as Error));
+      return;
+    }
     const job = this.queue.shift()!;
     this.current = { lines: new Map(), job };
     this.setOptions({ MultiPV: job.opts.multiPv ?? 1, ...(job.opts.uciOptions ?? {}) });
@@ -203,4 +220,14 @@ let shared: EngineClient | null = null;
 export function getEngine(): EngineClient {
   if (!shared) shared = new EngineClient(workerTransport(engineUrl()));
   return shared;
+}
+
+/** Détruit l'instance partagée pour permettre une nouvelle tentative de chargement. */
+export function resetEngine(): void {
+  try {
+    shared?.dispose();
+  } catch {
+    /* déjà arrêté */
+  }
+  shared = null;
 }

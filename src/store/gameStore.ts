@@ -34,6 +34,45 @@ export interface GameState {
   lastMove: () => { from: Square; to: Square } | null;
 }
 
+const STORAGE_KEY = 'bluered-current-game';
+type Persisted = Pick<GameState, 'startFen' | 'fen' | 'records' | 'mode' | 'playerColor' | 'botElo' | 'status' | 'startedAt' | 'savedGameId' | 'exerciseBestMove' | 'flipped' | 'heatmapMode'>;
+
+/** Relit la partie en cours depuis localStorage (survit au rechargement et à la fermeture de l'app). */
+export function loadPersistedGame(storage: Pick<Storage, 'getItem'> | null = typeof localStorage !== 'undefined' ? localStorage : null): Partial<Persisted> {
+  try {
+    const raw = storage?.getItem(STORAGE_KEY);
+    if (!raw) return {};
+    const data = JSON.parse(raw) as Persisted;
+    if (!data.fen || !Array.isArray(data.records)) return {};
+    return data;
+  } catch {
+    return {};
+  }
+}
+
+export function persistGame(state: GameState, storage: Pick<Storage, 'setItem'> | null = typeof localStorage !== 'undefined' ? localStorage : null): void {
+  if (!storage) return;
+  const data: Persisted = {
+    startFen: state.startFen,
+    fen: state.fen,
+    records: state.records,
+    mode: state.mode,
+    playerColor: state.playerColor,
+    botElo: state.botElo,
+    status: state.status,
+    startedAt: state.startedAt,
+    savedGameId: state.savedGameId,
+    exerciseBestMove: state.exerciseBestMove,
+    flipped: state.flipped,
+    heatmapMode: state.heatmapMode,
+  };
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    /* quota ou stockage indisponible */
+  }
+}
+
 export const useGame = create<GameState>((set, get) => ({
   startFen: START_FEN,
   fen: START_FEN,
@@ -48,6 +87,7 @@ export const useGame = create<GameState>((set, get) => ({
   botThinking: false,
   savedGameId: null,
   exerciseBestMove: null,
+  ...loadPersistedGame(),
   newGame: ({ mode, playerColor = 'w', botElo = 1000, startFen = START_FEN, exerciseBestMove = null }) =>
     set({
       startFen,
@@ -96,3 +136,5 @@ export const useGame = create<GameState>((set, get) => ({
     return r.length ? { from: r[r.length - 1].from, to: r[r.length - 1].to } : null;
   },
 }));
+
+useGame.subscribe((state) => persistGame(state));

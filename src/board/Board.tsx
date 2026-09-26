@@ -1,9 +1,9 @@
 // Échiquier SVG Bleu contre Rouge : clic-clic, glisser-déposer, promotion, flèches, heatmap.
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { attackedSquaresOf, computeAttacks, parseFenBoard, boardPieces, type AttackOptions } from '../chess/attacks';
 import { applyMove, inCheck, kingSquare, legalMovesFrom, needsPromotion, turnOf } from '../chess/game';
 import type { Color, PieceSymbol, Square } from '../chess/types';
-import { ALL_SQUARES, coordsToSquare } from '../chess/types';
+import { ALL_SQUARES, coordsToSquare, squareToCoords } from '../chess/types';
 import { Piece } from './Piece';
 import { ThreatOverlay, squareXY, type HeatmapMode } from './ThreatOverlay';
 import type { Palette } from './theme';
@@ -42,6 +42,40 @@ export interface BoardProps {
 const SIZE = 800;
 const SQ = SIZE / 8;
 
+/**
+ * Identités stables des pièces entre deux positions : la pièce déplacée garde son identifiant (ainsi que la tour
+ * du roque), ce qui permet d'animer le glissement avec des clés React constantes.
+ */
+export function nextPieceIds(prev: Map<Square, number>, prevFen: string | null, fen: string, lastMove: { from: Square; to: Square } | null, nextId: { value: number }): Map<Square, number> {
+  const board = parseFenBoard(fen);
+  const ids = new Map<Square, number>();
+  if (prevFen && lastMove && prev.size > 0) {
+    for (const [sq, id] of prev) ids.set(sq, id);
+    const movedId = ids.get(lastMove.from);
+    ids.delete(lastMove.from);
+    if (movedId !== undefined) ids.set(lastMove.to, movedId);
+    // Roque : la tour saute aussi.
+    const fromFile = lastMove.from.charCodeAt(0);
+    const toFile = lastMove.to.charCodeAt(0);
+    const rank = lastMove.to[1];
+    const piece = board[parseInt(rank, 10) - 1][toFile - 97];
+    if (piece?.type === 'k' && Math.abs(fromFile - toFile) === 2) {
+      const rookFrom = (toFile > fromFile ? 'h' : 'a') + rank;
+      const rookTo = (toFile > fromFile ? 'f' : 'd') + rank;
+      const rid = ids.get(rookFrom as Square);
+      ids.delete(rookFrom as Square);
+      if (rid !== undefined) ids.set(rookTo as Square, rid);
+    }
+  }
+  // Nettoyage : cases vides, puis identifiants neufs pour les pièces sans identité (nouvelle partie, promotion).
+  for (const sq of [...ids.keys()]) {
+    const { file, rank } = squareToCoords(sq);
+    if (!board[rank][file]) ids.delete(sq);
+  }
+  for (const pc of boardPieces(board)) if (!ids.has(pc.square)) ids.set(pc.square, nextId.value++);
+  return ids;
+}
+
 export function Board(p: BoardProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [selected, setSelected] = useState<Square | null>(null);
@@ -51,6 +85,16 @@ export function Board(p: BoardProps) {
 
   const board = useMemo(() => parseFenBoard(p.fen), [p.fen]);
   const pieces = useMemo(() => boardPieces(board), [board]);
+  const idsRef = useRef<{ fen: string | null; ids: Map<Square, number>; counter: { value: number } }>({ fen: null, ids: new Map(), counter: { value: 1 } });
+  const skipAnimRef = useRef(false);
+  if (idsRef.current.fen !== p.fen) {
+    idsRef.current.ids = nextPieceIds(idsRef.current.ids, idsRef.current.fen, p.fen, p.lastMove ?? null, idsRef.current.counter);
+    idsRef.current.fen = p.fen;
+  }
+  const animate = p.animations !== false && !skipAnimRef.current;
+  useEffect(() => {
+    skipAnimRef.current = false;
+  }, [p.fen]);
   const turn = turnOf(p.fen);
   const summary = useMemo(() => computeAttacks(p.fen, p.attackOptions), [p.fen, p.attackOptions]);
   const check = useMemo(() => (inCheck(p.fen) ? kingSquare(p.fen, turn) : null), [p.fen, turn]);
@@ -137,7 +181,10 @@ export function Board(p: BoardProps) {
     const from = drag.from;
     setDrag(null);
     if (sq && sq !== from) {
+      // Après un glisser-déposer, la pièce est déjà à destination : pas d'animation.
+      skipAnimRef.current = true;
       if (tryMove(from, sq)) setSelected(null);
+      else skipAnimRef.current = false;
     }
   };
 
@@ -234,7 +281,7 @@ export function Board(p: BoardProps) {
           const isDragging = drag?.from === pc.square;
           return (
             <Piece
-              key={`${pc.square}`}
+              key={idsRef.current.ids.get(pc.square) ?? pc.square}
               type={pc.type}
               color={pc.color}
               x={x}
@@ -242,6 +289,7 @@ export function Board(p: BoardProps) {
               size={SQ}
               fillColor={p.palette[pc.color].piece}
               dragging={isDragging}
+              animate={animate}
             />
           );
         })}

@@ -24,7 +24,8 @@ test('partie humain contre humain jusqu\'au mat, heatmap et sauvegarde', async (
   for (const [f, t] of seq) await move(page, f, t);
   await expect(page.getByTestId('status')).toContainText('Échec et mat');
   await expect(page.getByTestId('move-list')).toContainText('Qxf7#');
-  // Heatmap : f7 est attaquée par le Bleu (dame + fou) ; la case porte un calque.
+  // Heatmap : f7 est attaquée par le Bleu (dame + fou) ; la case porte un calque en mode « Tout ».
+  await page.locator('[data-heatmode="A"]').click();
   await expect(page.locator('[data-heat="f7"]')).toHaveAttribute('data-blue', /[1-9]/);
   // Mode « Masquer » retire le calque ; raccourci clavier A le remet.
   await page.locator('[data-heatmode="H"]').click();
@@ -85,4 +86,34 @@ test('exercice de visualisation à l\'aveugle', async ({ page }) => {
   await page.getByTestId('ex-knight').click();
   await page.getByTestId('reveal').click();
   await expect(page.getByTestId('blindfold-score')).toContainText('%');
+});
+
+test('la partie en cours survit à un rechargement et se consulte coup par coup', async ({ page }) => {
+  await skipOnboarding(page);
+  await page.goto('#/partie');
+  await page.getByTestId('mode-human').click();
+  await page.getByTestId('start-game').click();
+  await move(page, 'e2', 'e4');
+  await move(page, 'e7', 'e5');
+  await page.reload();
+  await expect(page.getByTestId('move-list')).toContainText('e5');
+  await expect(page.locator('[data-testid="board"]')).toHaveAttribute('data-fen', / w /);
+  // Bouton « Reprendre » sur l'accueil.
+  await page.goto('#/');
+  await expect(page.getByTestId('resume-game')).toBeVisible();
+  await page.getByTestId('resume-game').click();
+  await expect(page.getByTestId('review-bar')).toBeVisible();
+  // Consultation d'une position précédente : l'échiquier devient lecture seule, puis retour au direct.
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('[data-testid="board"]')).toHaveAttribute('data-fen', / b /);
+  await expect(page.locator('[data-testid="board"]')).toHaveAttribute('data-movable', '');
+  await page.getByTestId('back-live').click();
+  await expect(page.locator('[data-testid="board"]')).toHaveAttribute('data-movable', 'wb');
+  await move(page, 'g1', 'f3');
+  await expect(page.getByTestId('move-list')).toContainText('Nf3');
+  // Mode « Pièce seule » : survoler le cavalier f3 allume ses cases (e5, g5, d4, h4...).
+  await page.locator('[data-heatmode="P"]').click();
+  await page.locator('[data-square="f3"]').hover({ force: true });
+  await expect(page.locator('[data-heat="e5"]')).toHaveAttribute('data-blue', '1');
+  await expect(page.locator('[data-heat="a3"]')).toHaveCount(0);
 });

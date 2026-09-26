@@ -61,8 +61,8 @@ export function ThreatOverlay(p: Props) {
       bCount = p.focusColor === 'b' ? 1 : 0;
     }
     if (mode === 'C' && (wCount === 0 || bCount === 0)) continue;
-    const w = showW ? wCount : 0;
-    const b = showB ? bCount : 0;
+    const w = mode === 'P' || showW ? wCount : 0;
+    const b = mode === 'P' || showB ? bCount : 0;
     if (w === 0 && b === 0) continue;
     const patW = p.hatching ? 'url(#hatch-w)' : palette.w.overlay;
     const patB = p.hatching ? 'url(#hatch-b)' : palette.b.overlay;

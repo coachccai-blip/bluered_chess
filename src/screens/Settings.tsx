@@ -4,12 +4,14 @@ import { db } from '../data/db';
 import { allGamesPgn, backupFileName, downloadOrShare, exportBackup, importBackup, parseBackup, serializeBackup, type ImportReport } from '../data/backup';
 import { encryptText } from '../data/crypto';
 import { HEATMAP_MODES } from '../board/ThreatOverlay';
+import { useInstallPrompt } from '../app/installPrompt';
 
 export function SettingsScreen() {
   const { settings, update } = useSettings();
   const [report, setReport] = useState<ImportReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const { canInstall, installed, install } = useInstallPrompt();
 
   const doExport = async () => {
     const b = await exportBackup(db);
@@ -155,6 +157,13 @@ export function SettingsScreen() {
         <p className="small">
           Version <strong data-testid="version">{__APP_VERSION__}</strong> · <a href="#/a-propos">À propos et licences</a>
         </p>
+        {installed ? (
+          <p className="small tag tag-ok">Application installée</p>
+        ) : canInstall ? (
+          <button type="button" className="btn btn-sm btn-primary" onClick={() => void install()}>
+            Installer l'application
+          </button>
+        ) : null}
         <p className="muted small">Installation : Chrome/Edge → icône « Installer » dans la barre d'adresse ; Android → « Ajouter à l'écran d'accueil » ; iPhone → Partager → « Sur l'écran d'accueil » (recommandé : Safari peut effacer les données d'un site non installé après 7 jours).</p>
         <button type="button" className="btn btn-danger btn-sm" onClick={() => void resetAll()}>
           Effacer toutes les données

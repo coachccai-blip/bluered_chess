@@ -22,7 +22,10 @@ node scripts/make-icons.mjs  # régénère les PNG d'icônes depuis public/icons
 - Les couleurs internes restent `w`/`b` (chess.js) ; seule la couche d'affichage (`src/board/theme.ts`) traduit en
   **Bleu** (joue en premier) et **Rouge**. Le PGN conserve Blancs/Noirs pour rester compatible Lichess/chess.com.
 - Une seule source de vérité : le FEN courant + l'historique dans `src/store/gameStore.ts` ; échiquier, heatmap et
-  moteur en dérivent.
+  moteur en dérivent. Le store est persisté dans localStorage (`bluered-current-game`) pour reprendre une partie.
+- Les pièces de l'échiquier ont des identités stables (`nextPieceIds` dans `Board.tsx`) pour animer le glissement ;
+  la transformation est en CSS, pas en attribut SVG.
+- Le mode `exercise` du store se joue contre le bot comme le mode `bot`, avec retour sur le meilleur coup attendu.
 - Le moteur Stockfish lite mono-thread tourne dans un Web Worker (`src/engine/engineClient.ts`) avec une file
   d'attente ; jamais d'appel concurrent. Aucun en-tête COOP/COEP n'est disponible sur GitHub Pages.
 - Coût zéro, aucun serveur, aucune clé obligatoire. Toutes les données vivent dans IndexedDB (Dexie).

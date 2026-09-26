@@ -13,6 +13,7 @@ import { START_FEN, turnOf, lanToSan } from '../chess/game';
 import type { Color, Square } from '../chess/types';
 import { saveFinishedGame } from '../data/gameService';
 import { db, loadProfile } from '../data/db';
+import { resultScore } from '../progress/profile';
 import { navigate } from '../app/router';
 import { sounds } from '../ui/sounds';
 import { colorLabel } from '../board/theme';
@@ -27,7 +28,8 @@ interface PendingSetup {
 export function Play() {
   const g = useGame();
   const { settings, palette } = useSettings();
-  const { engine, error: engineError } = useEngine();
+  const { engine, error: engineError, retry: retryEngine } = useEngine();
+  const vsBot = g.mode === 'bot' || g.mode === 'exercise';
   const [setupOpen, setSetupOpen] = useState(g.records.length === 0 && g.mode === 'bot' && !g.exerciseBestMove);
   const [setup, setSetup] = useState<PendingSetup>({ mode: 'bot', color: 'w', botElo: g.botElo });
   const [recommended, setRecommended] = useState<number | undefined>();
@@ -35,6 +37,9 @@ export function Play() {
   const [drawMsg, setDrawMsg] = useState<string | null>(null);
   const [exerciseFeedback, setExerciseFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  /** Position consultée (null = direct). */
+  const [viewPly, setViewPly] = useState<number | null>(null);
+  const [botRecords, setBotRecords] = useState<Record<number, { wins: number; losses: number; draws: number }>>({});
   const botJob = useRef(0);
 
   useEffect(() => {
@@ -42,16 +47,47 @@ export function Play() {
       setRecommended(p.recommendedBotElo);
       setSetup((s) => ({ ...s, botElo: g.records.length === 0 ? p.recommendedBotElo : s.botElo }));
     });
+    // Bilan contre chaque bot.
+    void db.games.toArray().then((games) => {
+      const rec: Record<number, { wins: number; losses: number; draws: number }> = {};
+      for (const game of games) {
+        if (!game.botElo) continue;
+        const r = (rec[game.botElo] ??= { wins: 0, losses: 0, draws: 0 });
+        const sc = resultScore(game);
+        if (sc === 1) r.wins++;
+        else if (sc === 0) r.losses++;
+        else r.draws++;
+      }
+      setBotRecords(rec);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Retour au direct dès qu'un coup est joué ; flèches ← → pour consulter les positions précédentes.
+  useEffect(() => {
+    setViewPly(null);
+  }, [g.records.length]);
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const n = g.records.length;
+      if (n === 0) return;
+      if (e.key === 'ArrowLeft') setViewPly((v) => Math.max(0, (v ?? n) - 1));
+      if (e.key === 'ArrowRight') setViewPly((v) => (v === null || v + 1 >= n ? null : v + 1));
+    };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, [g.records.length]);
+
   const turn = turnOf(g.fen);
-  const botColor: Color | null = g.mode === 'bot' ? (g.playerColor === 'w' ? 'b' : 'w') : null;
-  const movable: Color[] = g.status.over ? [] : g.mode === 'human' ? ['w', 'b'] : [g.playerColor];
+  const botColor: Color | null = vsBot ? (g.playerColor === 'w' ? 'b' : 'w') : null;
+  const movable: Color[] = g.status.over || viewPly !== null ? [] : g.mode === 'human' ? ['w', 'b'] : [g.playerColor];
+  const viewedFen = viewPly === null ? g.fen : viewPly === 0 ? g.startFen : g.records[viewPly - 1].fenAfter;
+  const viewedLastMove = viewPly === null ? g.lastMove() : viewPly === 0 ? null : { from: g.records[viewPly - 1].from, to: g.records[viewPly - 1].to };
 
   // Boucle du bot.
   useEffect(() => {
-    if (!engine || g.mode !== 'bot' || g.status.over || turn !== botColor || g.botThinking) return;
+    if (!engine || !vsBot || g.status.over || turn !== botColor || g.botThinking || viewPly !== null) return;
     const job = ++botJob.current;
     g.setBotThinking(true);
     const profile = profileFor(g.botElo);
@@ -72,7 +108,7 @@ export function Play() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine, g.fen, g.mode, g.status.over, turn, botColor, g.botThinking]);
+  }, [engine, g.fen, g.mode, g.status.over, turn, botColor, g.botThinking, viewPly]);
 
   // Barre d'évaluation optionnelle.
   useEffect(() => {
@@ -143,7 +179,7 @@ export function Play() {
 
   const undo = () => {
     botJob.current++;
-    const plies = g.mode === 'bot' ? (turn === g.playerColor ? 2 : 1) : 1;
+    const plies = vsBot ? (turn === g.playerColor ? 2 : 1) : 1;
     g.undo(plies);
     setExerciseFeedback(null);
   };
@@ -164,7 +200,6 @@ export function Play() {
     } else setDrawMsg('Le bot refuse la nulle : il pense avoir l\'avantage.');
   };
 
-  const lastMove = g.lastMove();
   const arrows: Arrow[] = useMemo(() => [], []);
   const attackOptions = useMemo(() => ({ ignorePinned: settings.ignorePinned, xray: settings.xray }), [settings.ignorePinned, settings.xray]);
   const playerLabel = colorLabel(g.playerColor, palette);
@@ -172,7 +207,7 @@ export function Play() {
 
   const statusText = (() => {
     if (!g.status.over) {
-      if (g.mode === 'bot' && turn === botColor) return `${botProfile.name} réfléchit…`;
+      if (vsBot && turn === botColor) return `${botProfile.name} réfléchit…`;
       return `Trait au ${colorLabel(turn, palette)}`;
     }
     const s = g.status;
@@ -184,13 +219,13 @@ export function Play() {
   return (
     <div className="play-layout">
       <div>
-        <PlayerBar color={botColor ?? 'b'} name={g.mode === 'bot' ? `${botProfile.name} (${g.botElo})` : colorLabel('b', palette)} palette={palette} active={turn === (botColor ?? 'b') && !g.status.over} thinking={g.botThinking} flipped={g.flipped} top />
+        <PlayerBar color={botColor ?? 'b'} name={vsBot ? `${botProfile.name} (${g.botElo})` : colorLabel('b', palette)} palette={palette} active={turn === (botColor ?? 'b') && !g.status.over} thinking={g.botThinking} flipped={g.flipped} top />
         <Board
-          fen={g.fen}
+          fen={viewedFen}
           flipped={g.flipped}
           movable={movable}
           onMove={onMove}
-          lastMove={lastMove}
+          lastMove={viewedLastMove}
           arrows={arrows}
           heatmapMode={g.heatmapMode}
           palette={palette}
@@ -202,10 +237,23 @@ export function Play() {
           attackOptions={attackOptions}
           animations={settings.animations}
         />
-        <PlayerBar color={g.playerColor} name={g.mode === 'bot' ? `Moi (${playerLabel})` : colorLabel('w', palette)} palette={palette} active={turn === g.playerColor && !g.status.over} flipped={g.flipped} />
+        <PlayerBar color={g.playerColor} name={vsBot ? `Moi (${playerLabel})` : colorLabel('w', palette)} palette={palette} active={turn === g.playerColor && !g.status.over} flipped={g.flipped} />
         {settings.showEvalBar && evalCp !== null && (
           <div className="eval-bar" title={`Évaluation : ${(evalCp / 100).toFixed(1)}`} style={{ maxWidth: 'min(92vw, 640px)', margin: '.4rem auto' }}>
             <div style={{ width: `${50 + 50 * (2 / (1 + Math.exp(-0.00368208 * evalCp)) - 1)}%` }} />
+          </div>
+        )}
+        {g.records.length > 0 && (
+          <div className="review-bar" data-testid="review-bar">
+            <button type="button" className="btn btn-sm" onClick={() => setViewPly(0)} title="Début">⏮</button>
+            <button type="button" className="btn btn-sm" onClick={() => setViewPly((v) => Math.max(0, (v ?? g.records.length) - 1))} title="Coup précédent">◀</button>
+            <span className="muted small">{viewPly === null ? 'direct' : `coup ${viewPly}/${g.records.length}`}</span>
+            <button type="button" className="btn btn-sm" onClick={() => setViewPly((v) => (v === null || v + 1 >= g.records.length ? null : v + 1))} title="Coup suivant">▶</button>
+            {viewPly !== null && (
+              <button type="button" className="btn btn-sm btn-primary" data-testid="back-live" onClick={() => setViewPly(null)}>
+                Retour au direct
+              </button>
+            )}
           </div>
         )}
         <HeatmapToolbar mode={g.heatmapMode} onChange={g.setHeatmapMode} />
@@ -215,8 +263,15 @@ export function Play() {
           <div className="row spread">
             <strong data-testid="status">{statusText}</strong>
           </div>
-          {engineError && <p className="small" style={{ color: 'var(--red-2)' }}>Moteur indisponible : {engineError}</p>}
-          {!engine && !engineError && g.mode === 'bot' && <p className="muted small">Chargement du moteur…</p>}
+          {engineError && (
+            <p className="small" style={{ color: 'var(--red-2)' }}>
+              Moteur indisponible : {engineError}{' '}
+              <button type="button" className="btn btn-sm" data-testid="engine-retry" onClick={retryEngine}>
+                Réessayer
+              </button>
+            </p>
+          )}
+          {!engine && !engineError && vsBot && <p className="muted small">Chargement du moteur…</p>}
           {exerciseFeedback && (
             <p data-testid="exercise-feedback" style={{ color: exerciseFeedback.ok ? '#2ecc71' : 'var(--accent)' }}>
               {exerciseFeedback.text}
@@ -230,7 +285,7 @@ export function Play() {
             <button type="button" className="btn btn-sm" onClick={() => g.setFlipped(!g.flipped)} title="Retourner l'échiquier">
               Retourner
             </button>
-            {(settings.allowUndo || g.mode !== 'bot') && (
+            {(settings.allowUndo || !vsBot) && (
               <button type="button" className="btn btn-sm" data-testid="undo" disabled={g.records.length === 0 || g.status.over} onClick={undo}>
                 Annuler
               </button>
@@ -261,7 +316,7 @@ export function Play() {
         </div>
         <div className="card">
           <h3>Coups</h3>
-          <MoveList moves={g.records.map((r) => ({ ply: r.ply, san: r.san }))} current={g.records.length} />
+          <MoveList moves={g.records.map((r) => ({ ply: r.ply, san: r.san }))} current={viewPly ?? g.records.length} onSelect={(ply) => setViewPly(ply >= g.records.length ? null : ply)} />
         </div>
         <div className="card small muted">
           <strong>Heatmap :</strong> chiffres = nombre d'attaquants (Bleu en haut à gauche, Rouge en bas à droite). Anneau pulsant = pièce en prise. Raccourcis clavier A B R C P H X.
@@ -281,7 +336,7 @@ export function Play() {
             </div>
             {setup.mode === 'bot' && (
               <>
-                <BotSelector elo={setup.botElo} recommended={recommended} onChange={(e) => setSetup({ ...setup, botElo: e })} />
+                <BotSelector elo={setup.botElo} recommended={recommended} record={botRecords[setup.botElo]} onChange={(e) => setSetup({ ...setup, botElo: e })} />
                 <div>
                   <div className="muted small">Mon camp</div>
                   <div className="btn-row">

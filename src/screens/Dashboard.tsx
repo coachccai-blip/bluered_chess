@@ -6,16 +6,20 @@ import { Radar } from '../ui/Radar';
 import { profileFor } from '../engine/botProfiles';
 import { useSettings } from '../store/settingsStore';
 import { useGame } from '../store/gameStore';
+import { useShallow } from 'zustand/react/shallow';
 import { navigate } from '../app/router';
 import { Modal } from '../ui/Modal';
 import { Board } from '../board/Board';
 import { resultScore } from '../progress/profile';
+import { useInstallPrompt } from '../app/installPrompt';
 
 export function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [games, setGames] = useState<Game[]>([]);
-  const { settings, palette } = useSettings();
+  const { settings, palette, update } = useSettings();
+  const current = useGame(useShallow((s) => ({ inProgress: s.records.length > 0 && !s.status.over, botElo: s.botElo, mode: s.mode, plies: s.records.length })));
+  const { canInstall, installed, install } = useInstallPrompt();
 
   useEffect(() => {
     void (async () => {
@@ -36,7 +40,7 @@ export function Dashboard() {
 
   return (
     <div className="stack">
-      {!profile.onboardingDone && <Onboarding profile={profile} onDone={(p) => setProfile(p)} />}
+      {!profile.onboardingDone && <Onboarding profile={profile} onDone={(p) => setProfile(p)} onLevel={(elo) => void update({ defaultHeatmapMode: elo <= 800 ? 'P' : 'A' })} />}
       <div className="grid grid-2">
         <div className="card">
           <div className="muted small">Elo maison (estimation interne, à comparer prudemment avec Lichess)</div>
@@ -45,13 +49,26 @@ export function Dashboard() {
             {profile.gamesAnalyzed} partie{profile.gamesAnalyzed > 1 ? 's' : ''} analysée{profile.gamesAnalyzed > 1 ? 's' : ''} · série : {profile.streak.wins} V / {profile.streak.losses} D
           </p>
           <div className="btn-row">
-            <button type="button" className="btn btn-primary" data-testid="play-recommended" onClick={playRecommended}>
+            {current.inProgress && (
+              <a className="btn btn-primary" href="#/partie" data-testid="resume-game">
+                Reprendre la partie en cours ({current.mode === 'human' ? 'deux joueurs' : `bot ${current.botElo}`}, {current.plies} demi-coups)
+              </a>
+            )}
+            <button type="button" className={`btn ${current.inProgress ? '' : 'btn-primary'}`} data-testid="play-recommended" onClick={playRecommended}>
               Jouer contre {bot.name} ({bot.elo})
             </button>
             <a className="btn" href="#/partie">
               Choisir un bot
             </a>
           </div>
+          {canInstall && !installed && (
+            <p className="small" style={{ marginTop: '.5rem' }}>
+              <button type="button" className="btn btn-sm" onClick={() => void install()}>
+                Installer l'application
+              </button>{' '}
+              <span className="muted">pour la lancer hors ligne depuis l'écran d'accueil.</span>
+            </p>
+          )}
           {backupDue && (
             <p className="small" style={{ color: 'var(--accent)', marginTop: '.5rem' }}>
               Pense à sauvegarder tes données : <a href="#/reglages">exporter maintenant</a>.
@@ -130,12 +147,13 @@ export function Dashboard() {
   );
 }
 
-function Onboarding({ profile, onDone }: { profile: Profile; onDone: (p: Profile) => void }) {
+function Onboarding({ profile, onDone, onLevel }: { profile: Profile; onDone: (p: Profile) => void; onLevel: (elo: number) => void }) {
   const [step, setStep] = useState(0);
   const { palette } = useSettings();
   const finish = async (elo: number) => {
     const p: Profile = { ...profile, onboardingDone: true, estimatedElo: elo, recommendedBotElo: elo, updatedAt: Date.now() };
     await saveProfile(p, db);
+    onLevel(elo);
     onDone(p);
   };
   return (
@@ -166,7 +184,7 @@ function Onboarding({ profile, onDone }: { profile: Profile; onDone: (p: Profile
       )}
       {step === 2 && (
         <div className="onboarding-step stack">
-          <p>Quel est ton niveau ? Cela choisit ton premier adversaire.</p>
+          <p>Quel est ton niveau ? Cela choisit ton premier adversaire (et, pour les débutants, une heatmap « pièce seule » plus lisible, modifiable dans les réglages).</p>
           <div className="btn-row" style={{ justifyContent: 'center' }}>
             <button type="button" className="btn" data-testid="level-800" onClick={() => void finish(800)}>
               Débutant (800)

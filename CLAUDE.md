@@ -47,7 +47,7 @@ src/data       models.ts, db.ts (Dexie), backup.ts, crypto.ts, gameService.ts
 src/screens    Dashboard, Play, Debrief, History, Training, Settings, About
 src/ui         composants génériques (HeatmapToolbar, MoveList, BotSelector, EvalChart, Radar, Modal), speech.ts (voix)
 tests/unit     Vitest ; tests/e2e Playwright
-scripts        copy-engine.mjs, make-icons.mjs, calibrate.ts
+scripts        copy-engine.mjs (Stockfish + fichiers TTS), make-icons.mjs, calibrate.ts
 ```
 
 ## Spécifications clés
@@ -75,7 +75,12 @@ gravité (`phrases.ts`). Coach LLM optionnel avec la clé de l'utilisateur (mome
 et explique pourquoi le coup « Mieux » est meilleur (but du coup, réplique adverse après le coup joué, suite prévue, évaluations).
 `analyzeGame` conserve la variante principale (`bestLine`) et la meilleure réplique (`threat`). `speech.ts` utilise la Web Speech API
 et préfère la voix « Vivienne » (Microsoft, fr-FR) si elle est installée. Réglages : `voiceEnabled`, `voiceName`, `voiceRate`,
-`liveComments` (off / descriptive / full), `autoReadDebrief`.
+`liveComments` (off / descriptive / full), `autoReadDebrief`, `hdVoiceId`.
+**Voix HD hors ligne.** `src/ui/hdVoice.worker.ts` fait tourner Piper (piper-tts-web + ONNX Runtime Web) dans un Worker ;
+`hdVoice.ts` est le client (téléchargement avec progression, stockage OPFS, synthèse) ; `hdVoiceCatalog.ts` liste les voix
+françaises. Les fichiers moteur (`public/tts/ort/`, `public/tts/piper/`, ~33 Mo) sont copiés par `scripts/copy-engine.mjs`,
+exclus du pré-cache et mis en cache à la demande (Workbox CacheFirst). Les modèles viennent de huggingface.co
+(`diffusionstudio/piper-voices`). `speak()` utilise la voix HD active, sinon la voix du navigateur.
 
 **Profil et plan (section 8).** Indicateurs sur les 20 dernières parties : pièces pendantes (> 3/100 coups),
 tactiques ratées (> 4/100), sécurité du roi (> 20 % des parties), finales (< 75 % précision), ouverture (< 85 %),

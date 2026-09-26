@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { db } from '../data/db';
-import type { Analysis, Exercise, Game, TrainingPlan } from '../data/models';
+import type { Analysis, Drill, Exercise, Game, TrainingPlan } from '../data/models';
+import { dueDrills, isMastered } from '../progress/drills';
+import { MOTIF_LABEL, type Motif } from '../analysis/motifs';
 import { INDICATORS } from '../progress/profile';
 import { analyzedPairs, refreshProfileAndPlan } from '../data/gameService';
 import { blindfoldScore, countAttackersQuestion, knightSquaresQuestion, type BlindfoldQuestion, type CountQuestion } from '../progress/exercises';
@@ -19,12 +21,14 @@ type Active = { kind: 'knight' } | { kind: 'count' } | { kind: 'hanging' } | nul
 export function Training() {
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [pairs, setPairs] = useState<{ game: Game; analysis: Analysis }[]>([]);
+  const [drills, setDrills] = useState<Drill[]>([]);
   const [active, setActive] = useState<Active>(null);
   const { palette, settings } = useSettings();
 
   const reload = async () => {
     setPlan((await db.plans.orderBy('generatedAt').reverse().first()) ?? null);
     setPairs(await analyzedPairs());
+    setDrills(await db.drills.toArray());
   };
   useEffect(() => {
     void reload();
@@ -75,6 +79,15 @@ export function Training() {
     }
   };
 
+  const due = dueDrills(drills);
+  const mastered = drills.filter(isMastered).length;
+  const launchDrill = (d: Drill) => {
+    const g = useGame.getState();
+    g.newGame({ mode: 'exercise', playerColor: d.fen.split(' ')[1] === 'b' ? 'b' : 'w', botElo: 1200, startFen: d.fen, exerciseBestMove: d.bestMove, exerciseDrillId: d.id });
+    g.setHeatmapMode('A');
+    navigate('partie');
+  };
+
   return (
     <div className="stack">
       <div className="page-head">
@@ -88,6 +101,30 @@ export function Training() {
       {active?.kind === 'hanging' && <HangingExercise pairs={pairs} onClose={() => setActive(null)} />}
       {!active && (
         <>
+          <div className="card" data-testid="drills">
+            <div className="row spread">
+              <h3>Révisions du jour</h3>
+              <span className="muted small">{drills.length} fiche{drills.length > 1 ? 's' : ''} · {mastered} acquise{mastered > 1 ? 's' : ''}</span>
+            </div>
+            <p className="muted small">Chaque erreur analysée devient une fiche : retrouve le bon coup. Réussie, elle revient dans 1, 3, 7, 14 puis 30 jours ; ratée, elle revient demain.</p>
+            {due.length === 0 ? (
+              <p className="small">{drills.length === 0 ? 'Aucune fiche pour l\'instant : analyse une partie pour en créer.' : 'Rien à réviser aujourd\'hui. Reviens demain !'}</p>
+            ) : (
+              <div className="stack" style={{ gap: '.4rem' }}>
+                {due.slice(0, 8).map((d) => (
+                  <div key={d.id} className="indicator">
+                    <span>
+                      <strong>Coup {Math.ceil(d.ply / 2)}</strong> · {d.motif ? MOTIF_LABEL[d.motif as Motif] : 'erreur'} <span className="muted small">(tu avais joué {d.playedSan}) · boîte {d.box}</span>
+                    </span>
+                    <button type="button" className="btn btn-sm btn-primary" onClick={() => launchDrill(d)}>
+                      Réviser
+                    </button>
+                  </div>
+                ))}
+                {due.length > 8 && <p className="muted small">… et {due.length - 8} autre{due.length - 8 > 1 ? 's' : ''}.</p>}
+              </div>
+            )}
+          </div>
           <div className="card">
             <h3>Exercices libres</h3>
             <div className="btn-row">

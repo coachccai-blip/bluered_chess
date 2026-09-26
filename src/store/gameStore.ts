@@ -21,7 +21,12 @@ export interface GameState {
   /** Identifiant de la partie sauvegardée (après fin). */
   savedGameId: string | null;
   exerciseBestMove: string | null;
-  newGame: (opts: { mode: GameMode; playerColor?: Color; botElo?: number; startFen?: string; exerciseBestMove?: string | null }) => void;
+  /** Fiche de révision en cours (répétition espacée). */
+  exerciseDrillId: string | null;
+  /** Objectif de la partie. */
+  goal: { key: string; label: string } | null;
+  lastMoveAt: number;
+  newGame: (opts: { mode: GameMode; playerColor?: Color; botElo?: number; startFen?: string; exerciseBestMove?: string | null; exerciseDrillId?: string | null; goal?: { key: string; label: string } | null }) => void;
   playMove: (m: MoveInput | string) => MoveRecord | null;
   undo: (plies: number) => void;
   resign: () => void;
@@ -35,7 +40,7 @@ export interface GameState {
 }
 
 const STORAGE_KEY = 'bluered-current-game';
-type Persisted = Pick<GameState, 'startFen' | 'fen' | 'records' | 'mode' | 'playerColor' | 'botElo' | 'status' | 'startedAt' | 'savedGameId' | 'exerciseBestMove' | 'flipped' | 'heatmapMode'>;
+type Persisted = Pick<GameState, 'startFen' | 'fen' | 'records' | 'mode' | 'playerColor' | 'botElo' | 'status' | 'startedAt' | 'savedGameId' | 'exerciseBestMove' | 'flipped' | 'heatmapMode'> & Partial<Pick<GameState, 'exerciseDrillId' | 'goal' | 'lastMoveAt'>>;
 
 /** Relit la partie en cours depuis localStorage (survit au rechargement et à la fermeture de l'app). */
 export function loadPersistedGame(storage: Pick<Storage, 'getItem'> | null = typeof localStorage !== 'undefined' ? localStorage : null): Partial<Persisted> {
@@ -65,6 +70,9 @@ export function persistGame(state: GameState, storage: Pick<Storage, 'setItem'> 
     exerciseBestMove: state.exerciseBestMove,
     flipped: state.flipped,
     heatmapMode: state.heatmapMode,
+    exerciseDrillId: state.exerciseDrillId,
+    goal: state.goal,
+    lastMoveAt: state.lastMoveAt,
   };
   try {
     storage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -87,8 +95,11 @@ export const useGame = create<GameState>((set, get) => ({
   botThinking: false,
   savedGameId: null,
   exerciseBestMove: null,
+  exerciseDrillId: null,
+  goal: null,
+  lastMoveAt: Date.now(),
   ...loadPersistedGame(),
-  newGame: ({ mode, playerColor = 'w', botElo = 1000, startFen = START_FEN, exerciseBestMove = null }) =>
+  newGame: ({ mode, playerColor = 'w', botElo = 1000, startFen = START_FEN, exerciseBestMove = null, exerciseDrillId = null, goal = null }) =>
     set({
       startFen,
       fen: startFen,
@@ -102,22 +113,27 @@ export const useGame = create<GameState>((set, get) => ({
       botThinking: false,
       savedGameId: null,
       exerciseBestMove,
+      exerciseDrillId,
+      goal,
+      lastMoveAt: Date.now(),
     }),
   playMove: (m) => {
     const s = get();
     if (s.status.over) return null;
     const res = applyMove(s.fen, m, s.records.length + 1);
     if (!res) return null;
+    const now = Date.now();
+    res.record.thinkMs = Math.max(0, now - s.lastMoveAt);
     const records = [...s.records, res.record];
     const status = gameStatusWithHistory(s.startFen, records.map((r) => r.san));
-    set({ fen: res.fen, records, status });
+    set({ fen: res.fen, records, status, lastMoveAt: now });
     return res.record;
   },
   undo: (plies) => {
     const s = get();
     const records = s.records.slice(0, Math.max(0, s.records.length - plies));
     const fen = records.length ? records[records.length - 1].fenAfter : s.startFen;
-    set({ records, fen, status: { over: false }, botThinking: false });
+    set({ records, fen, status: { over: false }, botThinking: false, lastMoveAt: Date.now() });
   },
   resign: () => {
     const s = get();

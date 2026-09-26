@@ -21,6 +21,9 @@ import { Modal } from '../ui/Modal';
 import { Material } from '../ui/Material';
 import { Toast } from '../ui/Toast';
 import { EvalBarVertical } from '../ui/EvalBarVertical';
+import { assessMoveRisk, type MoveRisk } from '../analysis/risk';
+import { recordDrillResult } from '../data/gameService';
+import { goalFor } from '../progress/goals';
 import { IconList, IconKnight } from '../ui/icons';
 import { describeLiveMove, spoken, explainBest } from '../analysis/explain';
 import { openingAnnouncement, openingForGame, openingLabel } from '../chess/openings';
@@ -48,6 +51,10 @@ export function Play() {
   const [exerciseFeedback, setExerciseFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  /** Coup dangereux en attente de confirmation (filet anti-gaffe). */
+  const [pendingMove, setPendingMove] = useState<{ move: { from: Square; to: Square; promotion?: 'q' | 'r' | 'b' | 'n' }; risk: MoveRisk } | null>(null);
+  const [avoided, setAvoided] = useState(0);
+  const [planTarget, setPlanTarget] = useState<string | undefined>();
   const [comment, setComment] = useState<string | null>(null);
   const speechStatus = useSpeechStatus();
   const commentJob = useRef(0);
@@ -61,6 +68,7 @@ export function Play() {
       setRecommended(p.recommendedBotElo);
       setSetup((s) => ({ ...s, botElo: g.records.length === 0 ? p.recommendedBotElo : s.botElo }));
     });
+    void db.plans.orderBy('generatedAt').reverse().first().then((plan) => setPlanTarget(plan?.targets[0]));
     // Bilan contre chaque bot.
     void db.games.toArray().then((games) => {
       const rec: Record<number, { wins: number; losses: number; draws: number }> = {};
@@ -169,6 +177,7 @@ export function Play() {
       endReason: st.reason,
       startedAt: g.startedAt,
       mode: g.mode,
+      goal: g.goal,
     })
       .then((game) => {
         g.setSavedGameId(game.id);
@@ -226,29 +235,52 @@ export function Play() {
     [engine],
   );
 
-  const onMove = useCallback(
+  const applyMoveNow = useCallback(
     (m: { from: Square; to: Square; promotion?: 'q' | 'r' | 'b' | 'n' }) => {
       const fenBefore = useGame.getState().fen;
       const rec = useGame.getState().playMove(m);
       if (!rec) return;
       if (settings.sounds) (rec.captured ? sounds.capture : rec.check ? sounds.check : sounds.move)();
       void commentLastMove(rec);
-      if (useGame.getState().mode === 'exercise' && useGame.getState().exerciseBestMove) {
-        const best = useGame.getState().exerciseBestMove!;
+      const gs = useGame.getState();
+      if (gs.mode === 'exercise' && gs.exerciseBestMove && gs.records.length === 1) {
+        const best = gs.exerciseBestMove;
         const ok = rec.san === best || rec.lan === best || lanToSan(fenBefore, best) === rec.san;
         setExerciseFeedback(ok ? { ok: true, text: `Bien joué : ${rec.san} était le bon coup.` } : { ok: false, text: `${rec.san} n'est pas le meilleur coup. Le moteur préférait ${best}. Annule et réessaie, ou continue la partie.` });
+        // Répétition espacée : on enregistre le premier essai seulement.
+        if (gs.exerciseDrillId) void recordDrillResult(gs.exerciseDrillId, ok).then(() => setToast(ok ? 'Fiche validée : prochaine révision plus tard' : 'Fiche à revoir demain'));
       }
     },
     [settings.sounds, commentLastMove],
   );
 
+  const onMove = useCallback(
+    (m: { from: Square; to: Square; promotion?: 'q' | 'r' | 'b' | 'n' }) => {
+      const gs = useGame.getState();
+      const level = useSettings.getState().settings.blunderCheck;
+      // Filet anti-gaffe : seulement pour le joueur (pas en mode exercice, où l'erreur fait partie de l'apprentissage).
+      if (level !== 'off' && gs.mode !== 'exercise' && (gs.mode === 'human' || turnOf(gs.fen) === gs.playerColor)) {
+        const risk = assessMoveRisk(gs.fen, `${m.from}${m.to}${m.promotion ?? ''}`, level);
+        if (risk) {
+          setPendingMove({ move: m, risk });
+          return;
+        }
+      }
+      applyMoveNow(m);
+    },
+    [applyMoveNow],
+  );
+
   const startGame = () => {
     const color: Color = setup.color === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : setup.color;
     botJob.current++;
-    g.newGame({ mode: setup.mode, playerColor: color, botElo: setup.botElo });
+    const goal = setup.mode === 'bot' ? goalFor(planTarget) ?? null : null;
+    g.newGame({ mode: setup.mode, playerColor: color, botElo: setup.botElo, goal });
     g.setHeatmapMode(settings.defaultHeatmapMode);
     stopSpeaking();
-    setComment(null);
+    setComment(goal ? `Objectif de cette partie : ${goal.label.toLowerCase()}.` : null);
+    setPendingMove(null);
+    setAvoided(0);
     setSetupOpen(false);
     setExerciseFeedback(null);
     setDrawMsg(null);
@@ -409,7 +441,13 @@ export function Play() {
                 </button>
               )}
             </div>
+            {g.goal && (
+              <p className="small" style={{ margin: '0 0 .4rem' }} data-testid="game-goal">
+                <span className="tag tag-accent">Objectif</span> {g.goal.label}
+              </p>
+            )}
             <p className="small" style={{ margin: 0 }}>{comment ?? 'Je commente chaque coup ici. Active la voix dans les réglages pour m\'entendre.'}</p>
+            {avoided > 0 && <p className="muted small" style={{ margin: '.3rem 0 0' }}>Gaffes évitées grâce au filet : {avoided}</p>}
             {settings.voiceEnabled && speechStatus.state === 'preparing' && <p className="muted small" style={{ margin: '.3rem 0 0' }}>Préparation de la voix HD…</p>}
             {settings.voiceEnabled && speechStatus.state === 'speaking' && <p className="muted small" style={{ margin: '.3rem 0 0' }}>🔊 lecture ({speechStatus.engine === 'hd' ? 'voix HD' : 'voix du navigateur'})</p>}
             {settings.voiceEnabled && speechStatus.state === 'error' && (
@@ -447,6 +485,42 @@ export function Play() {
       </aside>
 
       <Toast text={toast} onDone={() => setToast(null)} />
+      {pendingMove && (
+        <Modal title="Attends, es-tu sûr ?" onClose={() => setPendingMove(null)}>
+          <div className="stack" data-testid="blunder-check">
+            <p>
+              {pendingMove.risk.severity === 'mate' ? 'Danger de mat : ' : 'Ce coup semble risqué : '}
+              {pendingMove.risk.reasons.join(' ; ')}.
+            </p>
+            <p className="muted small">Regarde la heatmap autour de tes pièces avant de décider. Tu peux désactiver ce filet dans les réglages quand tu n'en auras plus besoin.</p>
+            <div className="btn-row">
+              <button
+                type="button"
+                className="btn btn-primary"
+                data-testid="blunder-rethink"
+                onClick={() => {
+                  setPendingMove(null);
+                  setAvoided((n) => n + 1);
+                }}
+              >
+                Je réfléchis encore
+              </button>
+              <button
+                type="button"
+                className="btn"
+                data-testid="blunder-play"
+                onClick={() => {
+                  const m = pendingMove.move;
+                  setPendingMove(null);
+                  applyMoveNow(m);
+                }}
+              >
+                Jouer quand même
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {setupOpen && (
         <Modal title="Nouvelle partie" onClose={g.records.length > 0 ? () => setSetupOpen(false) : undefined}>
           <div className="stack">

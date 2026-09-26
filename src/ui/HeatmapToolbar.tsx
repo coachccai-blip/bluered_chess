@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { HEATMAP_MODES, type HeatmapMode } from '../board/ThreatOverlay';
 
-export function HeatmapToolbar({ mode, onChange }: { mode: HeatmapMode; onChange: (m: HeatmapMode) => void }) {
+export function HeatmapToolbar({ mode, onChange, drawMode, onDrawModeChange }: { mode: HeatmapMode; onChange: (m: HeatmapMode) => void; drawMode?: boolean; onDrawModeChange?: (on: boolean) => void }) {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -19,6 +19,18 @@ export function HeatmapToolbar({ mode, onChange }: { mode: HeatmapMode; onChange
           {m.label}
         </button>
       ))}
+      {onDrawModeChange && (
+        <button
+          type="button"
+          className={`heat-btn heat-draw ${drawMode ? 'active' : ''}`}
+          data-testid="toolbar-draw"
+          aria-pressed={!!drawMode}
+          title={drawMode ? 'Mode dessin actif : toucher = marquer une case, glisser = flèche. Toucher à nouveau pour rejouer.' : 'Mode dessin : marquer des cases et tracer des flèches avec le doigt ou le clic gauche'}
+          onClick={() => onDrawModeChange(!drawMode)}
+        >
+          ✎ Dessin
+        </button>
+      )}
     </div>
   );
 }

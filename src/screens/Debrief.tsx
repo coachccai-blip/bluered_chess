@@ -50,6 +50,7 @@ export function Debrief({ id }: { id: string }) {
   const [guessScore, setGuessScore] = useState({ ok: 0, total: 0 });
   const [guessFeedback, setGuessFeedback] = useState<string | null>(null);
   const [guessBusy, setGuessBusy] = useState(false);
+  const [drawMode, setDrawMode] = useState(false);
   const readingRef = useRef(false);
 
   useEffect(() => {
@@ -332,9 +333,11 @@ export function Debrief({ id }: { id: string }) {
             showHanging={settings.showHanging}
             showLoose={settings.showLoose}
             hatching={settings.hatching}
+            drawMode={drawMode}
+            onDrawModeChange={setDrawMode}
           />
           </div>
-          <HeatmapToolbar mode={heat} onChange={setHeat} />
+          <HeatmapToolbar mode={heat} onChange={setHeat} drawMode={drawMode} onDrawModeChange={setDrawMode} />
           <div className="btn-row" style={{ justifyContent: 'center' }}>
             <button type="button" className={`btn btn-sm ${settings.showEvalBarDebrief !== false ? '' : 'btn-ghost'}`} data-testid="debrief-evalbar-toggle" aria-pressed={settings.showEvalBarDebrief !== false} onClick={() => void updateSettings({ showEvalBarDebrief: settings.showEvalBarDebrief === false })} title="Afficher ou masquer la barre d'avantage">
               {settings.showEvalBarDebrief !== false ? 'Masquer la barre' : 'Afficher la barre'}

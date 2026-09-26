@@ -37,6 +37,9 @@ export interface BoardProps {
   onSquareClick?: (sq: Square) => void;
   /** Cases surlignées (exercices). */
   marked?: Square[];
+  /** Mode crayon contrôlé par l'écran (sinon état interne + bouton sur l'échiquier). */
+  drawMode?: boolean;
+  onDrawModeChange?: (on: boolean) => void;
 }
 
 const SIZE = 800;
@@ -89,7 +92,13 @@ export function Board(p: BoardProps) {
   const [userArrows, setUserArrows] = useState<Arrow[]>([]);
   const [userMarks, setUserMarks] = useState<{ square: Square; color: string }[]>([]);
   const [annot, setAnnot] = useState<{ from: Square; to: Square | null; color: string } | null>(null);
-  const [drawMode, setDrawMode] = useState(false);
+  const [drawModeInternal, setDrawModeInternal] = useState(false);
+  const drawMode = p.drawMode ?? drawModeInternal;
+  const setDrawMode = (on: boolean) => {
+    if (p.onDrawModeChange) p.onDrawModeChange(on);
+    else setDrawModeInternal(on);
+  };
+  const [promotionArmed, setPromotionArmed] = useState(false);
   const longPress = useRef<{ timer: number; sq: Square; x: number; y: number } | null>(null);
 
   const board = useMemo(() => parseFenBoard(p.fen), [p.fen]);
@@ -160,6 +169,8 @@ export function Board(p: BoardProps) {
     if (!legalMovesFrom(p.fen, from).some((m) => m.to === to)) return false;
     if (needsPromotion(p.fen, from, to)) {
       setPromotion({ from, to });
+      setPromotionArmed(false);
+      window.setTimeout(() => setPromotionArmed(true), 450);
       return true;
     }
     p.onMove?.({ from, to });
@@ -450,7 +461,7 @@ export function Board(p: BoardProps) {
         aria-pressed={drawMode}
         title={drawMode ? 'Mode crayon actif : clic gauche = marquer, glisser = flèche. Clic droit toujours disponible.' : 'Dessiner des flèches et marquer des cases (clic droit, ou activer le crayon pour le clic gauche)'}
         onClick={() => {
-          setDrawMode((d) => !d);
+          setDrawMode(!drawMode);
           setSelected(null);
           setDrag(null);
         }}
@@ -458,7 +469,7 @@ export function Board(p: BoardProps) {
         ✎
       </button>
       {promotion && (
-        <div className="promotion-modal" role="dialog" aria-label="Choix de la promotion">
+        <div className="promotion-modal" role="dialog" aria-label="Choix de la promotion" style={promotionArmed ? undefined : { pointerEvents: 'none' }}>
           <p>Promotion en :</p>
           <div className="promotion-choices">
             {promoPieces.map((t) => (

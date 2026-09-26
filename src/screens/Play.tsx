@@ -22,6 +22,7 @@ import { Material } from '../ui/Material';
 import { Toast } from '../ui/Toast';
 import { IconList, IconKnight } from '../ui/icons';
 import { describeLiveMove, spoken, explainBest } from '../analysis/explain';
+import { openingAnnouncement, openingForGame, openingLabel } from '../chess/openings';
 import { speak, stopSpeaking } from '../ui/speech';
 import { buildMoveEval } from '../analysis/analyzeGame';
 import { CATEGORY_LABEL } from '../analysis/classify';
@@ -176,6 +177,12 @@ export function Play() {
       const job = ++commentJob.current;
       const pc = useGame.getState().playerColor;
       let text = describeLiveMove(rec, pc);
+      const gs = useGame.getState();
+      if (gs.startFen === START_FEN) {
+        const sans = gs.records.map((r) => r.san);
+        const ann = openingAnnouncement(sans, sans.length);
+        if (ann) text = `Ouverture : ${openingLabel(ann)}. ${text}`;
+      }
       setComment(text);
       const say = (t: string) => st.voiceEnabled && void speak(t, { voiceName: st.voiceName, rate: st.voiceRate });
       if (st.liveComments !== 'full' || !engine || rec.color !== pc) {
@@ -197,7 +204,7 @@ export function Play() {
         };
         const ev = buildMoveEval(rec, toPos(rec.fenBefore, before), toPos(rec.fenAfter, after), useGame.getState().records.slice(0, -1));
         const verdict = ev.category === 'excellent' || ev.category === 'good' ? `${CATEGORY_LABEL[ev.category]} coup.` : `${CATEGORY_LABEL[ev.category]}${ev.bestMove ? `, mieux valait ${spoken(ev.bestMove)}.` : '.'}`;
-        const why = ev.explanation ?? explainBest(ev);
+        const why = explainBest(ev, true);
         text = `${text} ${verdict}${why ? ` ${why}` : ''}`;
         setComment(text);
         say(text);
@@ -262,6 +269,7 @@ export function Play() {
   const arrows: Arrow[] = useMemo(() => [], []);
   const attackOptions = useMemo(() => ({ ignorePinned: settings.ignorePinned, xray: settings.xray }), [settings.ignorePinned, settings.xray]);
   const playerLabel = colorLabel(g.playerColor, palette);
+  const opening = useMemo(() => (g.startFen === START_FEN ? openingForGame(g.records.map((r) => r.san)) : null), [g.records, g.startFen]);
   const botProfile = profileFor(g.botElo);
 
   const statusText = (() => {
@@ -395,6 +403,11 @@ export function Play() {
             <IconList className="ico" />
             <h3>Coups</h3>
           </div>
+          {opening && (
+            <p className="small" style={{ margin: '0 0 .4rem' }} data-testid="opening-live">
+              <span className="tag tag-accent">{opening.eco}</span> {openingLabel(opening)}
+            </p>
+          )}
           <MoveList moves={g.records.map((r) => ({ ply: r.ply, san: r.san }))} current={viewPly ?? g.records.length} onSelect={(ply) => setViewPly(ply >= g.records.length ? null : ply)} />
         </div>
         <div className="card small muted">

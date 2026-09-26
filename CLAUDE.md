@@ -39,7 +39,7 @@ node scripts/make-icons.mjs  # régénère les PNG d'icônes depuis public/icons
 ```
 src/app        routes, layout, bannière de mise à jour PWA
 src/board      Board.tsx (SVG, clic-clic et glisser-déposer), pieces.tsx, ThreatOverlay.tsx (heatmap), theme.ts
-src/chess      game.ts (chess.js), attacks.ts (carte d'attaques maison), see.ts, types.ts
+src/chess      game.ts (chess.js), attacks.ts (carte d'attaques maison), see.ts, types.ts, openings.ts (noms français, par position)
 src/engine     engineClient.ts (UCI), botProfiles.ts (21 profils), bot.ts (softmax + gaffes), openingBook.ts
 src/analysis   analyzeGame.ts, classify.ts, motifs.ts, coach.ts, phrases.ts, explain.ts (pourquoi « Mieux », commentaires), winprob.ts, llmCoach.ts (opt-in)
 src/progress   elo.ts, profile.ts (7 indicateurs), trainingPlan.ts, exercises.ts
@@ -76,6 +76,9 @@ et explique pourquoi le coup « Mieux » est meilleur (but du coup, réplique ad
 `analyzeGame` conserve la variante principale (`bestLine`) et la meilleure réplique (`threat`). `speech.ts` utilise la Web Speech API
 et préfère la voix « Vivienne » (Microsoft, fr-FR) si elle est installée. Réglages : `voiceEnabled`, `voiceName`, `voiceRate`,
 `liveComments` (off / descriptive / full), `autoReadDebrief`, `hdVoiceId`.
+**Ouvertures.** `openings.ts` contient ~200 lignes ECO avec noms et variantes en français ; l'index est par position (transpositions
+gérées). `openingAnnouncement(sans, ply)` renvoie la nouvelle reconnaissance à annoncer ; affichée en partie, en débrief et en historique.
+Les explications du coup « Mieux » (`explainBest`) sont en mots simples, sans chiffres (`evalWords`), avec « ton/ta » et « son/sa ».
 **Voix HD hors ligne.** `src/ui/hdVoice.worker.ts` fait tourner Piper (piper-tts-web + ONNX Runtime Web) dans un Worker ;
 `hdVoice.ts` est le client (téléchargement avec progression, stockage OPFS, synthèse) ; `hdVoiceCatalog.ts` liste les voix
 françaises. Les fichiers moteur (`public/tts/ort/`, `public/tts/piper/`, ~33 Mo) sont copiés par `scripts/copy-engine.mjs`,

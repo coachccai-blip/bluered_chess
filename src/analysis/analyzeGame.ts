@@ -3,7 +3,6 @@ import { Chess } from 'chess.js';
 import type { EngineClient } from '../engine/engineClient';
 import { lineScore } from '../engine/engineClient';
 import { lanToSan, phaseOf, replayRecords, pvToSan, type MoveRecord } from '../chess/game';
-import { explainBest } from './explain';
 import { legalMoves } from '../chess/game';
 import { classifyMove } from './classify';
 import { detectMotifs } from './motifs';
@@ -128,6 +127,5 @@ export function buildMoveEval(rec: MoveRecord, before: PosEval, after: PosEval, 
     motifs,
     phase: phaseOf(rec.fenBefore, rec.ply),
   };
-  move.explanation = explainBest(move);
   return move;
 }

@@ -24,6 +24,8 @@ test('partie humain contre humain jusqu\'au mat, heatmap et sauvegarde', async (
   for (const [f, t] of seq) await move(page, f, t);
   await expect(page.getByTestId('status')).toContainText('Échec et mat');
   await expect(page.getByTestId('move-list')).toContainText('Qxf7#');
+  // Ouverture reconnue et affichée pendant la partie.
+  await expect(page.getByTestId('opening-live')).toContainText('Partie du fou');
   // Heatmap : f7 est attaquée par le Bleu (dame + fou) ; la case porte un calque en mode « Tout ».
   await page.locator('[data-heatmode="A"]').click();
   await expect(page.locator('[data-heat="f7"]')).toHaveAttribute('data-blue', /[1-9]/);
@@ -71,7 +73,8 @@ test('le bot 800 répond et la partie est analysable, y compris hors ligne', asy
   await expect(page.getByTestId('accuracy')).toBeVisible({ timeout: 90_000 });
   // Commentaire de chaque coup dans le débrief et bouton de lecture.
   await page.keyboard.press('ArrowRight');
-  await expect(page.getByTestId('move-comment')).toContainText('Tu joues e4');
+  await expect(page.getByTestId('move-comment')).toContainText('Ouverture : Ouverture du pion roi. Tu joues e4');
+  await expect(page.getByTestId('opening-name')).toBeVisible();
   await expect(page.getByTestId('read-game')).toBeVisible();
   await context.setOffline(false);
 });

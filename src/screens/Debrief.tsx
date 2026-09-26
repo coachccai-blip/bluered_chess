@@ -21,7 +21,8 @@ import { decryptText } from '../data/crypto';
 import type { HeatmapMode } from '../board/ThreatOverlay';
 import type { Square } from '../chess/types';
 import { Ring } from '../ui/Ring';
-import { commentForMove, explainBest } from '../analysis/explain';
+import { bestLineText, commentForMove, explainBest } from '../analysis/explain';
+import { openingAnnouncement, openingForGame, openingLabel } from '../chess/openings';
 import { speak, stopSpeaking } from '../ui/speech';
 
 export function Debrief({ id }: { id: string }) {
@@ -107,8 +108,17 @@ export function Debrief({ id }: { id: string }) {
 
   // Sur un moment clé, on montre la position AVANT le coup avec les flèches.
   const boardFen = currentMove && arrows.length > 1 ? currentMove.fenBefore : fens[ply];
-  const commentText = currentMove ? commentForMove(currentMove, playerColor) : null;
-  const explanation = currentMove ? (currentMove.explanation ?? explainBest(currentMove)) : null;
+  const opening = useMemo(() => (game ? openingForGame(game.sans, game.startFen) : null), [game]);
+  const commentAt = (i: number): string | null => {
+    const m = moves[i - 1];
+    if (!m || !game) return null;
+    const ann = openingAnnouncement(game.sans, i);
+    const prefix = ann ? `Ouverture : ${openingLabel(ann)}. ` : '';
+    return prefix + commentForMove(m, playerColor);
+  };
+  const commentText = ply > 0 ? commentAt(ply) : null;
+  const explanation = currentMove ? explainBest(currentMove, currentMove.color === playerColor) : null;
+  const lineText = currentMove ? bestLineText(currentMove) : null;
 
   // Lecture automatique du commentaire à chaque navigation.
   useEffect(() => {
@@ -129,9 +139,9 @@ export function Debrief({ id }: { id: string }) {
     setReading(true);
     for (let i = Math.max(1, ply); i < fens.length && readingRef.current; i++) {
       setPly(i);
-      const m = moves[i - 1];
-      if (!m) break;
-      await speak(commentForMove(m, playerColor), { voiceName: settings.voiceName, rate: settings.voiceRate });
+      const text = commentAt(i);
+      if (!text) break;
+      await speak(text, { voiceName: settings.voiceName, rate: settings.voiceRate });
       await new Promise((r) => setTimeout(r, 350));
     }
     readingRef.current = false;
@@ -177,6 +187,11 @@ export function Debrief({ id }: { id: string }) {
         <div>
           <h1>Débrief</h1>
           <p className="muted small">{game.playerColor === 'blue' ? 'Bleu' : 'Rouge'} {game.botElo ? `contre Bot ${game.botElo}` : ''} · {game.result} · {new Date(game.createdAt).toLocaleDateString('fr-FR')}</p>
+          {opening && (
+            <p className="small" data-testid="opening-name">
+              <span className="tag tag-accent">{opening.eco}</span> <strong>{openingLabel(opening)}</strong>
+            </p>
+          )}
         </div>
         <div className="btn-row">
           <a className="btn btn-sm" href="#/historique">
@@ -302,6 +317,7 @@ export function Debrief({ id }: { id: string }) {
               {explanation && (
                 <div className="small" style={{ marginTop: '.5rem', padding: '.6rem .75rem', borderRadius: 'var(--radius-sm)', background: 'var(--bg-3)', borderLeft: '3px solid var(--green)' }} data-testid="why-better">
                   <strong>Pourquoi {currentMove.bestMove} est meilleur :</strong> {explanation}
+                  {lineText && <div className="muted" style={{ marginTop: '.3rem' }}>{lineText}</div>}
                 </div>
               )}
             </div>

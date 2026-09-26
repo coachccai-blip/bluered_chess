@@ -2,7 +2,8 @@
 import { Chess } from 'chess.js';
 import type { EngineClient } from '../engine/engineClient';
 import { lineScore } from '../engine/engineClient';
-import { lanToSan, phaseOf, replayRecords, type MoveRecord } from '../chess/game';
+import { lanToSan, phaseOf, replayRecords, pvToSan, type MoveRecord } from '../chess/game';
+import { explainBest } from './explain';
 import { legalMoves } from '../chess/game';
 import { classifyMove } from './classify';
 import { detectMotifs } from './motifs';
@@ -29,6 +30,8 @@ interface PosEval {
   /** Mat en N du point de vue du camp au trait (signé), ou null. */
   mate: number | null;
   bestLan: string | null;
+  /** Variante principale (LAN), meilleur coup en tête. */
+  pv: string[];
 }
 
 async function evalPosition(engine: EngineClient, fen: string, opts: AnalysisOptions): Promise<PosEval> {
@@ -37,11 +40,11 @@ async function evalPosition(engine: EngineClient, fen: string, opts: AnalysisOpt
   const stm = fen.split(' ')[1] === 'w' ? 1 : -1;
   if (!line) {
     // Position terminale (mat ou pat).
-    if (legalMoves(fen).length === 0 && new Chess(fen).isCheckmate()) return { cpWhite: -10000 * stm, mate: 0, bestLan: null };
-    return { cpWhite: 0, mate: null, bestLan: null };
+    if (legalMoves(fen).length === 0 && new Chess(fen).isCheckmate()) return { cpWhite: -10000 * stm, mate: 0, bestLan: null, pv: [] };
+    return { cpWhite: 0, mate: null, bestLan: null, pv: [] };
   }
   const score = lineScore(line);
-  return { cpWhite: score * stm, mate: line.mate ?? null, bestLan: res.bestMove ?? line.pv[0] ?? null };
+  return { cpWhite: score * stm, mate: line.mate ?? null, bestLan: res.bestMove ?? line.pv[0] ?? null, pv: line.pv };
 }
 
 /** Analyse une partie (SAN depuis startFen). Les évaluations sont en cp point de vue Blancs. */
@@ -100,7 +103,10 @@ export function buildMoveEval(rec: MoveRecord, before: PosEval, after: PosEval, 
     mateAvailableBefore,
     mateAgainstAfter,
   });
-  return {
+  const bestLine = pvToSan(rec.fenBefore, before.pv.slice(0, 5));
+  const threatLan = after.pv[0] ?? after.bestLan;
+  const threat = threatLan ? lanToSan(rec.fenAfter, threatLan) : null;
+  const move: MoveEval = {
     ply: rec.ply,
     san: rec.san,
     lan: rec.lan,
@@ -111,9 +117,14 @@ export function buildMoveEval(rec: MoveRecord, before: PosEval, after: PosEval, 
     evalAfter: after.cpWhite,
     bestMove: bestSan,
     bestMoveLan: bestLan,
+    bestLine,
+    threat,
+    threatLan: threatLan ?? null,
     winProbLoss,
     category,
     motifs,
     phase: phaseOf(rec.fenBefore, rec.ply),
   };
+  move.explanation = explainBest(move);
+  return move;
 }

@@ -80,7 +80,7 @@ describe('coach', () => {
     const records = replayRecords(START_FEN, ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Nd4', 'Nxe5', 'Qg5', 'Nxf7', 'Qxg2', 'Rf1', 'Qxe4+', 'Be2', 'Nf3#']);
     const evalsWhite = [20, 30, 30, 30, 30, 20, 100, -50, -50, -400, -400, -900, -900, -10000, -10000];
     const moves = records.map((r, i) =>
-      buildMoveEval(r, { cpWhite: evalsWhite[i], mate: null, bestLan: i === 6 ? 'c3' : null }, { cpWhite: evalsWhite[i + 1], mate: null, bestLan: null }, records.slice(0, i)),
+      buildMoveEval(r, { cpWhite: evalsWhite[i], mate: null, bestLan: i === 6 ? 'c3' : null, pv: [] }, { cpWhite: evalsWhite[i + 1], mate: null, bestLan: null, pv: [] }, records.slice(0, i)),
     );
     expect(moves).toHaveLength(14);
     const km = selectKeyMoments(moves, 'w');

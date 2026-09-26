@@ -90,6 +90,20 @@ export function lanToSan(fen: string, lan: string): string | null {
   }
 }
 
+/** Convertit une variante LAN en SAN (s'arrête au premier coup invalide). */
+export function pvToSan(fen: string, pv: string[]): string[] {
+  const c = new Chess(fen);
+  const out: string[] = [];
+  for (const lan of pv) {
+    try {
+      out.push(c.move({ from: lan.slice(0, 2), to: lan.slice(2, 4), promotion: lan.length > 4 ? (lan[4] as 'q') : undefined }).san);
+    } catch {
+      break;
+    }
+  }
+  return out;
+}
+
 export function sanToLan(fen: string, san: string): string | null {
   const c = new Chess(fen);
   try {

@@ -41,11 +41,11 @@ src/app        routes, layout, bannière de mise à jour PWA
 src/board      Board.tsx (SVG, clic-clic et glisser-déposer), pieces.tsx, ThreatOverlay.tsx (heatmap), theme.ts
 src/chess      game.ts (chess.js), attacks.ts (carte d'attaques maison), see.ts, types.ts
 src/engine     engineClient.ts (UCI), botProfiles.ts (21 profils), bot.ts (softmax + gaffes), openingBook.ts
-src/analysis   analyzeGame.ts, classify.ts, motifs.ts, coach.ts, phrases.ts, winprob.ts, llmCoach.ts (opt-in)
+src/analysis   analyzeGame.ts, classify.ts, motifs.ts, coach.ts, phrases.ts, explain.ts (pourquoi « Mieux », commentaires), winprob.ts, llmCoach.ts (opt-in)
 src/progress   elo.ts, profile.ts (7 indicateurs), trainingPlan.ts, exercises.ts
 src/data       models.ts, db.ts (Dexie), backup.ts, crypto.ts, gameService.ts
 src/screens    Dashboard, Play, Debrief, History, Training, Settings, About
-src/ui         composants génériques (HeatmapToolbar, MoveList, BotSelector, EvalChart, Radar, Modal)
+src/ui         composants génériques (HeatmapToolbar, MoveList, BotSelector, EvalChart, Radar, Modal), speech.ts (voix)
 tests/unit     Vitest ; tests/e2e Playwright
 scripts        copy-engine.mjs, make-icons.mjs, calibrate.ts
 ```
@@ -70,6 +70,12 @@ probabilité de gain (logistique Lichess). Catégories : excellent ≤ 2 %, bon 
 fourchette subie/ratée, clouage, roi au centre après le coup 15, coup dans une case rouge, échange perdant (SEE),
 mat en 1–3 raté/encaissé, temps perdu. 3 à 5 moments clés + tournant, phrases modèles françaises par motif et
 gravité (`phrases.ts`). Coach LLM optionnel avec la clé de l'utilisateur (moments clés seulement).
+
+**Commentaires et voix.** `explain.ts` décrit chaque coup (capture, échec, roque, pièce sauvée/défendue, menace, développement)
+et explique pourquoi le coup « Mieux » est meilleur (but du coup, réplique adverse après le coup joué, suite prévue, évaluations).
+`analyzeGame` conserve la variante principale (`bestLine`) et la meilleure réplique (`threat`). `speech.ts` utilise la Web Speech API
+et préfère la voix « Vivienne » (Microsoft, fr-FR) si elle est installée. Réglages : `voiceEnabled`, `voiceName`, `voiceRate`,
+`liveComments` (off / descriptive / full), `autoReadDebrief`.
 
 **Profil et plan (section 8).** Indicateurs sur les 20 dernières parties : pièces pendantes (> 3/100 coups),
 tactiques ratées (> 4/100), sécurité du roi (> 20 % des parties), finales (< 75 % précision), ouverture (< 85 %),

@@ -6,6 +6,7 @@ import { encryptText } from '../data/crypto';
 import { HEATMAP_MODES } from '../board/ThreatOverlay';
 import { useInstallPrompt } from '../app/installPrompt';
 import { Switch } from '../ui/Switch';
+import { hasVivienne, speak, stopSpeaking, useVoices } from '../ui/speech';
 
 export function SettingsScreen() {
   const { settings, update } = useSettings();
@@ -13,6 +14,9 @@ export function SettingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const { canInstall, installed, install } = useInstallPrompt();
+  const { voices, supported: voiceSupported } = useVoices();
+  const frVoices = voices.filter((v) => v.lang.toLowerCase().startsWith('fr'));
+  const otherVoices = voices.filter((v) => !v.lang.toLowerCase().startsWith('fr'));
 
   const doExport = async () => {
     const b = await exportBackup(db);
@@ -100,6 +104,65 @@ export function SettingsScreen() {
         <Toggle k="xray" label="Rayons X (batteries) dans la heatmap" />
         <Toggle k="sounds" label="Sons" />
         <Toggle k="animations" label="Animations" />
+      </div>
+      <div className="card" data-testid="voice-settings">
+        <h3>Voix du coach</h3>
+        <p className="muted small">
+          Chaque coup est commenté et lu par la synthèse vocale du navigateur (gratuite, locale). La voix <strong>Vivienne</strong> (Microsoft, français) est utilisée automatiquement si elle est disponible : dans Edge (voix « Vivienne Online (Natural) », connexion requise) ou après installation dans Windows 11 (Paramètres → Accessibilité → Narrateur → Ajouter des voix naturelles), elle fonctionne alors hors ligne dans Edge et Chrome.
+        </p>
+        {!voiceSupported && <p className="small" style={{ color: 'var(--red-2)' }}>Ce navigateur ne propose pas de synthèse vocale.</p>}
+        {voiceSupported && (
+          <p className="small">
+            {hasVivienne() ? <span className="tag tag-ok">Vivienne détectée</span> : <span className="tag tag-accent">Vivienne absente : voix française de remplacement</span>}{' '}
+            <span className="muted">{frVoices.length} voix française(s) disponible(s).</span>
+          </p>
+        )}
+        <Toggle k="voiceEnabled" label="Lire les commentaires à voix haute" />
+        <label className="field">
+          <span>Voix</span>
+          <select value={settings.voiceName ?? ''} onChange={(e) => void update({ voiceName: e.target.value || undefined })} data-testid="voice-select">
+            <option value="">Automatique (Vivienne si présente)</option>
+            {frVoices.map((v) => (
+              <option key={v.name} value={v.name}>
+                {v.name} {v.local ? '' : '(en ligne)'}
+              </option>
+            ))}
+            {otherVoices.length > 0 && <option disabled>— autres langues —</option>}
+            {otherVoices.map((v) => (
+              <option key={v.name} value={v.name}>
+                {v.name} ({v.lang})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Vitesse ({settings.voiceRate.toFixed(1)})</span>
+          <input type="range" min={0.6} max={1.6} step={0.1} value={settings.voiceRate} onChange={(e) => void update({ voiceRate: parseFloat(e.target.value) })} />
+        </label>
+        <label className="field">
+          <span>Commentaires pendant la partie</span>
+          <div className="segmented" role="radiogroup" aria-label="Commentaires en direct">
+            {([
+              ['off', 'Aucun'],
+              ['descriptive', 'Descriptifs'],
+              ['full', 'Avec avis'],
+            ] as const).map(([k, label]) => (
+              <button key={k} type="button" role="radio" aria-checked={settings.liveComments === k} className={settings.liveComments === k ? 'active' : ''} onClick={() => void update({ liveComments: k })}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </label>
+        <p className="muted small">« Descriptifs » décrit le coup et les pièces en prise (ce que la heatmap montre déjà). « Avec avis » ajoute le jugement du moteur sur tes coups et le coup meilleur, ce qui aide l'apprentissage mais revient à jouer avec une aide.</p>
+        <Toggle k="autoReadDebrief" label="Lire automatiquement chaque coup dans le débrief" />
+        <div className="btn-row" style={{ marginTop: '.5rem' }}>
+          <button type="button" className="btn btn-sm" onClick={() => void speak('Bonjour ! Je suis ton coach. Tu joues Cavalier f3 : bon coup, il développe une pièce et contrôle le centre.', { voiceName: settings.voiceName, rate: settings.voiceRate })}>
+            Essayer la voix
+          </button>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={stopSpeaking}>
+            Stop
+          </button>
+        </div>
       </div>
       <div className="card">
         <h3>Partie et analyse</h3>

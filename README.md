@@ -9,6 +9,7 @@ Application web d'échecs d'entraînement, **gratuite, open source (GPL v3), 100
 - **Profil de faiblesses** (radar à 7 axes), Elo maison, **plan d'entraînement** et exercices intégrés.
 - **PWA** installable sur ordinateur et téléphone, utilisable sans connexion (moteur pré-caché).
 - Données dans IndexedDB, **sauvegarde/restauration** par fichier JSON, export PGN.
+- **Coach vocal** : chaque coup est commenté (en partie et dans le débrief) et lu par la synthèse vocale du navigateur, voix « Vivienne » si disponible ; explication de chaque coup « Mieux ».
 - Partie en cours conservée après fermeture ou rechargement, navigation dans les coups pendant la partie, bilan contre chaque bot, bouton d'installation, indicateur hors ligne.
 
 ## Développement

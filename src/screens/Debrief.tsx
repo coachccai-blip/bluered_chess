@@ -21,6 +21,8 @@ import { decryptText } from '../data/crypto';
 import type { HeatmapMode } from '../board/ThreatOverlay';
 import type { Square } from '../chess/types';
 import { Ring } from '../ui/Ring';
+import { commentForMove, explainBest } from '../analysis/explain';
+import { speak, stopSpeaking } from '../ui/speech';
 
 export function Debrief({ id }: { id: string }) {
   const [game, setGame] = useState<Game | null>(null);
@@ -36,6 +38,8 @@ export function Debrief({ id }: { id: string }) {
   const { engine, error: engineError } = useEngine();
   const { settings, palette } = useSettings();
   const running = useRef(false);
+  const [reading, setReading] = useState(false);
+  const readingRef = useRef(false);
 
   useEffect(() => {
     void (async () => {
@@ -103,6 +107,36 @@ export function Debrief({ id }: { id: string }) {
 
   // Sur un moment clé, on montre la position AVANT le coup avec les flèches.
   const boardFen = currentMove && arrows.length > 1 ? currentMove.fenBefore : fens[ply];
+  const commentText = currentMove ? commentForMove(currentMove, playerColor) : null;
+  const explanation = currentMove ? (currentMove.explanation ?? explainBest(currentMove)) : null;
+
+  // Lecture automatique du commentaire à chaque navigation.
+  useEffect(() => {
+    if (!commentText || !settings.voiceEnabled || !settings.autoReadDebrief || readingRef.current) return;
+    void speak(commentText, { voiceName: settings.voiceName, rate: settings.voiceRate });
+  }, [commentText, settings.voiceEnabled, settings.autoReadDebrief, settings.voiceName, settings.voiceRate]);
+  useEffect(() => () => stopSpeaking(), []);
+
+  /** Lit toute la partie : avance d'un coup à la fin de chaque commentaire. */
+  const readWholeGame = async () => {
+    if (readingRef.current) {
+      readingRef.current = false;
+      setReading(false);
+      stopSpeaking();
+      return;
+    }
+    readingRef.current = true;
+    setReading(true);
+    for (let i = Math.max(1, ply); i < fens.length && readingRef.current; i++) {
+      setPly(i);
+      const m = moves[i - 1];
+      if (!m) break;
+      await speak(commentForMove(m, playerColor), { voiceName: settings.voiceName, rate: settings.voiceRate });
+      await new Promise((r) => setTimeout(r, 350));
+    }
+    readingRef.current = false;
+    setReading(false);
+  };
 
   const replayFromHere = (m: KeyMoment | MoveEval) => {
     const g = useGame.getState();
@@ -229,8 +263,20 @@ export function Debrief({ id }: { id: string }) {
               ⏭
             </button>
           </div>
+          {analysis && (
+            <div className="btn-row" style={{ justifyContent: 'center', marginTop: '.5rem' }}>
+              <button type="button" className={`btn btn-sm ${reading ? 'btn-danger' : 'btn-primary'}`} data-testid="read-game" onClick={() => void readWholeGame()}>
+                {reading ? 'Arrêter la lecture' : '🔊 Lire la partie coup par coup'}
+              </button>
+              {commentText && (
+                <button type="button" className="btn btn-sm" onClick={() => void speak(commentText, { voiceName: settings.voiceName, rate: settings.voiceRate })}>
+                  Relire ce coup
+                </button>
+              )}
+            </div>
+          )}
           {currentMove && (
-            <div className="card" style={{ marginTop: '.5rem' }}>
+            <div className="card" style={{ marginTop: '.5rem' }} data-testid="move-comment">
               <div className="row">
                 <span className="badge" style={{ background: CATEGORY_COLOR[currentMove.category], width: 14, height: 14 }} />
                 <strong>
@@ -250,6 +296,12 @@ export function Debrief({ id }: { id: string }) {
                       {MOTIF_LABEL[h.motif]}
                     </span>
                   ))}
+                </div>
+              )}
+              {commentText && <p className="small" style={{ margin: '.5rem 0 0' }}>{commentText.replace(explanation ?? '', '').trim()}</p>}
+              {explanation && (
+                <div className="small" style={{ marginTop: '.5rem', padding: '.6rem .75rem', borderRadius: 'var(--radius-sm)', background: 'var(--bg-3)', borderLeft: '3px solid var(--green)' }} data-testid="why-better">
+                  <strong>Pourquoi {currentMove.bestMove} est meilleur :</strong> {explanation}
                 </div>
               )}
             </div>

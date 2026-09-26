@@ -17,6 +17,13 @@ export interface MoveEval {
   evalAfter: number;
   bestMove: string | null; // SAN
   bestMoveLan: string | null;
+  /** Suite prévue par le moteur après le meilleur coup (SAN). */
+  bestLine?: string[];
+  /** Meilleure réplique adverse après le coup joué (SAN / LAN). */
+  threat?: string | null;
+  threatLan?: string | null;
+  /** Pourquoi le coup « Mieux » est meilleur (texte français). */
+  explanation?: string | null;
   winProbLoss: number;
   category: MoveCategory;
   motifs: MotifHit[];

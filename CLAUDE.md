@@ -1,0 +1,81 @@
+# BlueRed Chess — contexte pour Claude Code
+
+Application web d'échecs d'entraînement **Bleu contre Rouge**, gratuite, open source (GPL v3), 100 % côté client,
+publiée sur GitHub Pages, installable en PWA et utilisable hors ligne. Ce fichier résume le cahier des charges
+(brief d'origine, sections 1 à 13) et les conventions du dépôt.
+
+## Commandes
+
+```bash
+npm run dev        # serveur de développement (copie le moteur dans public/engine avant)
+npm test           # tests unitaires Vitest (tests/unit)
+npm run typecheck  # tsc --noEmit
+npm run build      # typage + build de production (dist/)
+npm run test:e2e   # Playwright (utilise vite preview sur le port 4173)
+npm run calibrate  # scripts/calibrate.ts : estime l'Elo des bots en local (long)
+node scripts/make-icons.mjs  # régénère les PNG d'icônes depuis public/icons/icon.svg
+```
+
+## Règles du dépôt
+
+- **Logique d'échecs pure** dans `src/chess/` et `src/analysis/` : TypeScript sans React ni DOM, testée.
+- Les couleurs internes restent `w`/`b` (chess.js) ; seule la couche d'affichage (`src/board/theme.ts`) traduit en
+  **Bleu** (joue en premier) et **Rouge**. Le PGN conserve Blancs/Noirs pour rester compatible Lichess/chess.com.
+- Une seule source de vérité : le FEN courant + l'historique dans `src/store/gameStore.ts` ; échiquier, heatmap et
+  moteur en dérivent.
+- Le moteur Stockfish lite mono-thread tourne dans un Web Worker (`src/engine/engineClient.ts`) avec une file
+  d'attente ; jamais d'appel concurrent. Aucun en-tête COOP/COEP n'est disponible sur GitHub Pages.
+- Coût zéro, aucun serveur, aucune clé obligatoire. Toutes les données vivent dans IndexedDB (Dexie).
+  Sauvegarde/restauration par fichier JSON avec fusion par identifiant (rien n'est écrasé).
+- Routage à hash (`#/partie`, `#/debrief/:id`, `#/historique`, `#/entrainement`, `#/reglages`, `#/a-propos`).
+- Tests avant la logique (règles, attaques, classification). Un commit par étape, message en français.
+- Licence GPL v3 (Stockfish). Crédits dans l'écran « À propos ».
+
+## Structure
+
+```
+src/app        routes, layout, bannière de mise à jour PWA
+src/board      Board.tsx (SVG, clic-clic et glisser-déposer), pieces.tsx, ThreatOverlay.tsx (heatmap), theme.ts
+src/chess      game.ts (chess.js), attacks.ts (carte d'attaques maison), see.ts, types.ts
+src/engine     engineClient.ts (UCI), botProfiles.ts (21 profils), bot.ts (softmax + gaffes), openingBook.ts
+src/analysis   analyzeGame.ts, classify.ts, motifs.ts, coach.ts, phrases.ts, winprob.ts, llmCoach.ts (opt-in)
+src/progress   elo.ts, profile.ts (7 indicateurs), trainingPlan.ts, exercises.ts
+src/data       models.ts, db.ts (Dexie), backup.ts, crypto.ts, gameService.ts
+src/screens    Dashboard, Play, Debrief, History, Training, Settings, About
+src/ui         composants génériques (HeatmapToolbar, MoveList, BotSelector, EvalChart, Radar, Modal)
+tests/unit     Vitest ; tests/e2e Playwright
+scripts        copy-engine.mjs, make-icons.mjs, calibrate.ts
+```
+
+## Spécifications clés
+
+**Heatmap (section 5).** Une pièce attaque une case si elle pourrait y capturer ; les pions n'attaquent qu'en
+diagonale ; une pièce clouée attaque quand même (option « réaliste » pour l'ignorer) ; la défense d'une pièce
+alliée compte comme contrôle ; rayons X en option. Opacité : 1 attaquant 25 %, 2 → 45 %, 3 → 65 %, 4+ → 85 %.
+Case contestée = diagonale bleu/rouge. Modes : A tout, B bleu, R rouge, C contestées, P pièce seule, H masquer,
+X prévisualisation après mon coup. Pièce en prise = anneau pulsant ; pièce pendante = triangle (option).
+La carte maison est validée contre `attackers()` de chess.js sur 30 FEN (tests/unit/attacks.test.ts).
+
+**Bots (section 6).** 800–1300 : hybride Stockfish MultiPV + softmax de température T (cp) + taux de gaffe ;
+1350–1800 : `UCI_LimitStrength` + `UCI_Elo` natif. Table dans `src/engine/botProfiles.ts` (à recalibrer avec
+`npm run calibrate`). Livre d'ouverture réduit, traits de personnalité (agression, bruit matériel, faiblesse en
+finale), délai de réflexion 0,5–2,5 s. Jamais de gaffe donnant mat en 1 au-dessus de 1200.
+
+**Analyse et coach (section 7).** Éval par position (profondeur 16 ordinateur / 12 mobile), conversion en
+probabilité de gain (logistique Lichess). Catégories : excellent ≤ 2 %, bon ≤ 5 %, imprécision ≤ 10 %, erreur
+≤ 20 %, gaffe > 20 %, mat raté. Motifs détectés sur la carte d'attaques : pièce en prise, capture gratuite ratée,
+fourchette subie/ratée, clouage, roi au centre après le coup 15, coup dans une case rouge, échange perdant (SEE),
+mat en 1–3 raté/encaissé, temps perdu. 3 à 5 moments clés + tournant, phrases modèles françaises par motif et
+gravité (`phrases.ts`). Coach LLM optionnel avec la clé de l'utilisateur (moments clés seulement).
+
+**Profil et plan (section 8).** Indicateurs sur les 20 dernières parties : pièces pendantes (> 3/100 coups),
+tactiques ratées (> 4/100), sécurité du roi (> 20 % des parties), finales (< 75 % précision), ouverture (< 85 %),
+cases rouges (> 5/100), gestion de l'avantage (> 25 %). Plan = 2 indicateurs les plus faibles × 3 exercices,
+10 min/jour, recalculé toutes les 5 parties. Elo maison K = 32 ; bot recommandé +50 après 2 victoires, −50 après
+2 défaites.
+
+**PWA et données (section 10).** vite-plugin-pwa (Workbox, pré-cache incluant `.wasm`), bannière « Nouvelle
+version », `navigator.storage.persist()`, rappel de sauvegarde toutes les 20 parties ou 30 jours, clé API chiffrée
+localement et exclue des sauvegardes. Base Vite `/bluered_chess/` (variable `VITE_BASE`).
+
+**Hors périmètre V1** : jeu en ligne, ouvertures encyclopédiques, blitz chronométré, applis natives, bots Maia.

@@ -10,9 +10,10 @@ export function updateElo(player: number, opponent: number, score: 0 | 0.5 | 1, 
 /** Bot recommandé : +50 après deux victoires, −50 après deux défaites, sinon le plus proche de l'Elo estimé. */
 export function recommendBot(current: number, streak: { wins: number; losses: number }, estimatedElo: number): number {
   const clamp = (v: number) => Math.min(1800, Math.max(800, Math.round(v / 50) * 50));
+  if (!current || Math.abs(current - estimatedElo) > 200) return clamp(estimatedElo);
   if (streak.wins >= 2) return clamp(current + 50);
   if (streak.losses >= 2) return clamp(current - 50);
-  return clamp(current || estimatedElo);
+  return clamp(current);
 }
 
 export function updateStreak(streak: { wins: number; losses: number }, score: 0 | 0.5 | 1): { wins: number; losses: number } {

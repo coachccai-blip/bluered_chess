@@ -1,4 +1,5 @@
 // Analyse coup par coup avec Stockfish (section 7, étape 1) puis classification et motifs.
+import { Chess } from 'chess.js';
 import type { EngineClient } from '../engine/engineClient';
 import { lineScore } from '../engine/engineClient';
 import { lanToSan, phaseOf, replayRecords, type MoveRecord } from '../chess/game';
@@ -36,13 +37,7 @@ async function evalPosition(engine: EngineClient, fen: string, opts: AnalysisOpt
   const stm = fen.split(' ')[1] === 'w' ? 1 : -1;
   if (!line) {
     // Position terminale (mat ou pat).
-    const legal = legalMoves(fen);
-    if (legal.length === 0) {
-      const fenTurnInCheck = fen; // on ne peut pas savoir sans chess.js ; on suppose mat si bestmove absent et échec
-      const { Chess } = await import('chess.js');
-      const c = new Chess(fenTurnInCheck);
-      if (c.isCheckmate()) return { cpWhite: -10000 * stm, mate: 0, bestLan: null };
-    }
+    if (legalMoves(fen).length === 0 && new Chess(fen).isCheckmate()) return { cpWhite: -10000 * stm, mate: 0, bestLan: null };
     return { cpWhite: 0, mate: null, bestLan: null };
   }
   const score = lineScore(line);

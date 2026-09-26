@@ -20,6 +20,9 @@ describe('Elo maison', () => {
     expect(recommendBot(1000, { wins: 0, losses: 2 }, 1000)).toBe(950);
     expect(recommendBot(1000, { wins: 1, losses: 0 }, 1000)).toBe(1000);
     expect(recommendBot(1800, { wins: 5, losses: 0 }, 1800)).toBe(1800);
+    // Trop loin de l'Elo estimé : on repart de l'estimation.
+    expect(recommendBot(1800, { wins: 0, losses: 1 }, 800)).toBe(800);
+    expect(recommendBot(0, { wins: 0, losses: 0 }, 1120)).toBe(1100);
     expect(updateStreak({ wins: 1, losses: 0 }, 1)).toEqual({ wins: 2, losses: 0 });
     expect(updateStreak({ wins: 1, losses: 0 }, 0.5)).toEqual({ wins: 0, losses: 0 });
   });

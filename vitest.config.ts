@@ -6,4 +6,6 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['tests/setup.ts'],
   },
+  define: { __APP_VERSION__: '"test"' },
+  resolve: {},
 });

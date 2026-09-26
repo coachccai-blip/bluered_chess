@@ -42,7 +42,7 @@ export function Debrief({ id }: { id: string }) {
   const [llmError, setLlmError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { engine, error: engineError } = useEngine();
-  const { settings, palette } = useSettings();
+  const { settings, palette, update: updateSettings } = useSettings();
   const running = useRef(false);
   const [reading, setReading] = useState(false);
   /** Mode « Devine le coup ». */
@@ -316,7 +316,9 @@ export function Debrief({ id }: { id: string }) {
       <div className="play-layout">
         <div>
           <div className="board-row">
-          {settings.showEvalBar && moves.length > 0 && <EvalBarVertical cp={ply === 0 ? moves[0]?.evalBefore ?? 0 : (moves[ply - 1]?.evalAfter ?? null)} flipped={playerColor === 'b'} palette={palette} />}
+          {settings.showEvalBarDebrief !== false && (
+            <EvalBarVertical cp={moves.length === 0 ? null : ply === 0 ? (moves[0]?.evalBefore ?? 0) : (moves[ply - 1]?.evalAfter ?? null)} flipped={playerColor === 'b'} palette={palette} pending={moves.length === 0 || (ply > 0 && !moves[ply - 1])} />
+          )}
           <Board
             fen={guessTarget ? guessTarget.fenBefore : boardFen}
             flipped={playerColor === 'b'}
@@ -334,6 +336,9 @@ export function Debrief({ id }: { id: string }) {
           </div>
           <HeatmapToolbar mode={heat} onChange={setHeat} />
           <div className="btn-row" style={{ justifyContent: 'center' }}>
+            <button type="button" className={`btn btn-sm ${settings.showEvalBarDebrief !== false ? '' : 'btn-ghost'}`} data-testid="debrief-evalbar-toggle" aria-pressed={settings.showEvalBarDebrief !== false} onClick={() => void updateSettings({ showEvalBarDebrief: settings.showEvalBarDebrief === false })} title="Afficher ou masquer la barre d'avantage">
+              {settings.showEvalBarDebrief !== false ? 'Masquer la barre' : 'Afficher la barre'}
+            </button>
             <button type="button" className="btn btn-sm" onClick={() => setPly(0)}>
               ⏮
             </button>

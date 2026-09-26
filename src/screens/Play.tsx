@@ -185,11 +185,10 @@ export function Play() {
         if (ann) text = `Ouverture : ${openingLabel(ann)}. ${text}`;
       }
       setComment(text);
-      const say = (t: string) => st.voiceEnabled && void speak(t, { voiceName: st.voiceName, rate: st.voiceRate });
-      if (st.liveComments !== 'full' || !engine || rec.color !== pc) {
-        say(text);
-        return;
-      }
+      const say = (t: string): Promise<void> => (st.voiceEnabled ? speak(t, { voiceName: st.voiceName, rate: st.voiceRate }) : Promise.resolve());
+      // On lit tout de suite la description ; l'avis du moteur sera lu à la suite, sans couper la phrase.
+      const firstSpeech = say(text);
+      if (st.liveComments !== 'full' || !engine || rec.color !== pc) return;
       // Avis du moteur sur mon coup : deux évaluations rapides (avant / après).
       try {
         const [before, after] = await Promise.all([
@@ -206,11 +205,14 @@ export function Play() {
         const ev = buildMoveEval(rec, toPos(rec.fenBefore, before), toPos(rec.fenAfter, after), useGame.getState().records.slice(0, -1));
         const verdict = ev.category === 'excellent' || ev.category === 'good' ? `${CATEGORY_LABEL[ev.category]} coup.` : `${CATEGORY_LABEL[ev.category]}${ev.bestMove ? `, mieux valait ${spoken(ev.bestMove)}.` : '.'}`;
         const why = explainBest(ev, true);
-        text = `${text} ${verdict}${why ? ` ${why}` : ''}`;
+        const verdictText = `${verdict}${why ? ` ${why}` : ''}`;
+        text = `${text} ${verdictText}`;
         setComment(text);
-        say(text);
+        await firstSpeech;
+        if (job !== commentJob.current) return;
+        void say(verdictText);
       } catch {
-        say(text);
+        /* moteur indisponible : la description a déjà été lue */
       }
     },
     [engine],

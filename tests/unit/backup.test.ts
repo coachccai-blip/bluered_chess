@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BlueRedDB } from '../../src/data/db';
+import { BlueRedDB, loadSettings } from '../../src/data/db';
 import { exportBackup, importBackup, parseBackup, serializeBackup, allGamesPgn } from '../../src/data/backup';
 import type { Game } from '../../src/data/models';
 
@@ -31,5 +31,17 @@ describe('sauvegarde et restauration', () => {
     expect(prof?.eloHistory).toHaveLength(2);
     expect(allGamesPgn(await b.games.toArray())).toContain('[Event "t1"]');
     expect(() => parseBackup('{"app":"autre"}')).toThrow();
+  });
+});
+
+describe('migration des réglages', () => {
+  it('passe les anciens réglages en commentaires « avec avis »', async () => {
+    const d = new BlueRedDB('test-settings');
+    await d.settings.put({ id: 'settings', theme: 'bluered', liveComments: 'descriptive' } as never);
+    const s = await loadSettings(d);
+    expect(s.liveComments).toBe('full');
+    expect(s.settingsVersion).toBe(2);
+    await d.settings.put({ ...s, liveComments: 'descriptive' });
+    expect((await loadSettings(d)).liveComments).toBe('descriptive'); // choix explicite conservé ensuite
   });
 });

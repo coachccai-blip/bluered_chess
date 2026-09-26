@@ -17,6 +17,7 @@
     "calibrate": "tsx scripts/calibrate.ts"
   },
   "dependencies": {
+    "@mintplex-labs/piper-tts-web": "^1.0.5",
     "chess.js": "^1.4.0",
     "dexie": "^4.4.6",
     "react": "^18.3.1",
@@ -25,6 +26,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@diffusionstudio/piper-wasm": "^1.0.0",
     "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",

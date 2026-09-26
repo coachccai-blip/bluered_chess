@@ -123,3 +123,20 @@ test('la partie en cours survit à un rechargement et se consulte coup par coup'
   await expect(page.locator('[data-heat="e5"]')).toHaveAttribute('data-blue', '1');
   await expect(page.locator('[data-heat="a3"]')).toHaveCount(0);
 });
+
+test('voix HD : catalogue, Worker de synthèse et erreur réseau propre', async ({ page, context }) => {
+  await skipOnboarding(page);
+  // Les modèles viennent de huggingface.co : on simule un réseau coupé vers ce domaine.
+  await context.route('https://huggingface.co/**', (route) => route.abort());
+  await page.goto('#/reglages');
+  await expect(page.getByTestId('hd-voices')).toBeVisible();
+  const row = page.getByTestId('hd-voice-fr_FR-siwis-low');
+  await expect(row).toContainText('28 Mo');
+  await row.getByRole('button', { name: 'Télécharger' }).click();
+  await expect(page.getByTestId('hd-voices')).toContainText('Téléchargement impossible', { timeout: 30_000 });
+  // Les fichiers moteur sont servis par l'application.
+  const ort = await page.request.get('tts/ort/ort-wasm-simd-threaded.wasm');
+  expect(ort.status()).toBe(200);
+  const piper = await page.request.get('tts/piper/piper_phonemize.wasm');
+  expect(piper.status()).toBe(200);
+});

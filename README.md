@@ -9,7 +9,7 @@ Application web d'échecs d'entraînement, **gratuite, open source (GPL v3), 100
 - **Profil de faiblesses** (radar à 7 axes), Elo maison, **plan d'entraînement** et exercices intégrés.
 - **PWA** installable sur ordinateur et téléphone, utilisable sans connexion (moteur pré-caché).
 - Données dans IndexedDB, **sauvegarde/restauration** par fichier JSON, export PGN.
-- **Coach vocal** : chaque coup est commenté (en partie et dans le débrief) et lu par la synthèse vocale du navigateur, voix « Vivienne » si disponible ; explication de chaque coup « Mieux ».
+- **Coach vocal** : chaque coup est commenté (en partie et dans le débrief) et lu à voix haute ; **voix HD française hors ligne** téléchargeable (Piper, open source, ~63 Mo) ou voix du navigateur (« Vivienne » si disponible) ; explication de chaque coup « Mieux ».
 - Partie en cours conservée après fermeture ou rechargement, navigation dans les coups pendant la partie, bilan contre chaque bot, bouton d'installation, indicateur hors ligne.
 
 ## Développement
@@ -23,7 +23,7 @@ npm run test:e2e   # tests Playwright (après npm run build)
 npm run calibrate  # calibration des bots (local, long)
 ```
 
-Le moteur (`stockfish-19-lite-single.js` + `.wasm`, ~1,8 Mo) est copié automatiquement de `node_modules` vers `public/engine/` avant `dev` et `build`.
+Le moteur (`stockfish-19-lite-single.js` + `.wasm`, ~1,8 Mo) et les fichiers de la voix HD (ONNX Runtime + phonémiseur Piper, ~33 Mo, chargés à la demande) sont copiés automatiquement de `node_modules` vers `public/` avant `dev` et `build`.
 
 ## Publication sur GitHub Pages
 

@@ -7,6 +7,7 @@ import { HEATMAP_MODES } from '../board/ThreatOverlay';
 import { useInstallPrompt } from '../app/installPrompt';
 import { Switch } from '../ui/Switch';
 import { hasVivienne, speak, stopSpeaking, useVoices } from '../ui/speech';
+import { HdVoicePanel } from '../ui/HdVoicePanel';
 
 export function SettingsScreen() {
   const { settings, update } = useSettings();
@@ -118,8 +119,9 @@ export function SettingsScreen() {
           </p>
         )}
         <Toggle k="voiceEnabled" label="Lire les commentaires à voix haute" />
+        <HdVoicePanel />
         <label className="field">
-          <span>Voix</span>
+          <span>Voix du navigateur (utilisée si aucune voix HD n'est active)</span>
           <select value={settings.voiceName ?? ''} onChange={(e) => void update({ voiceName: e.target.value || undefined })} data-testid="voice-select">
             <option value="">Automatique (Vivienne si présente)</option>
             {frVoices.map((v) => (
@@ -156,8 +158,8 @@ export function SettingsScreen() {
         <p className="muted small">« Descriptifs » décrit le coup et les pièces en prise (ce que la heatmap montre déjà). « Avec avis » ajoute le jugement du moteur sur tes coups et le coup meilleur, ce qui aide l'apprentissage mais revient à jouer avec une aide.</p>
         <Toggle k="autoReadDebrief" label="Lire automatiquement chaque coup dans le débrief" />
         <div className="btn-row" style={{ marginTop: '.5rem' }}>
-          <button type="button" className="btn btn-sm" onClick={() => void speak('Bonjour ! Je suis ton coach. Tu joues Cavalier f3 : bon coup, il développe une pièce et contrôle le centre.', { voiceName: settings.voiceName, rate: settings.voiceRate })}>
-            Essayer la voix
+          <button type="button" className="btn btn-sm" onClick={() => void speak('Bonjour ! Je suis ton coach. Tu joues Cavalier f3 : bon coup, il développe une pièce et contrôle le centre.', { rate: settings.voiceRate })}>
+            Essayer la voix active
           </button>
           <button type="button" className="btn btn-sm btn-ghost" onClick={stopSpeaking}>
             Stop

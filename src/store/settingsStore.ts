@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { db, loadSettings, saveSettings } from '../data/db';
 import { DEFAULT_SETTINGS, type Settings } from '../data/models';
 import { PALETTES, type Palette } from '../board/theme';
+import { setSpeechPrefs } from '../ui/speech';
 
 type Resolved = 'dark' | 'light';
 
@@ -37,10 +38,12 @@ export const useSettings = create<SettingsState>((set, get) => ({
   resolvedTheme: 'dark',
   load: async () => {
     const s = await loadSettings(db);
+    setSpeechPrefs({ hdVoiceId: s.hdVoiceId, voiceName: s.voiceName, rate: s.voiceRate });
     set({ settings: s, loaded: true, palette: PALETTES[s.theme] ?? PALETTES.bluered, resolvedTheme: applyTheme(s.themeMode) });
   },
   update: async (patch) => {
     const next = { ...get().settings, ...patch };
+    setSpeechPrefs({ hdVoiceId: next.hdVoiceId, voiceName: next.voiceName, rate: next.voiceRate });
     set({ settings: next, palette: PALETTES[next.theme] ?? PALETTES.bluered, resolvedTheme: applyTheme(next.themeMode) });
     await saveSettings(next, db);
   },

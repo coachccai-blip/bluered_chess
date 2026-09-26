@@ -96,6 +96,8 @@ export interface Settings {
   /** Voix du coach. */
   voiceEnabled: boolean;
   voiceName?: string;
+  /** Voix HD hors ligne (Piper) sélectionnée, ex. fr_FR-siwis-medium ; absente = voix du navigateur. */
+  hdVoiceId?: string;
   voiceRate: number;
   /** Commentaires en direct pendant la partie : off, descriptif (faits visibles), complet (avec avis du moteur). */
   liveComments: 'off' | 'descriptive' | 'full';

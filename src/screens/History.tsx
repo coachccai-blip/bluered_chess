@@ -63,8 +63,11 @@ export function History() {
 
   return (
     <div className="stack">
-      <div className="row spread">
-        <h1>Historique</h1>
+      <div className="page-head">
+        <div>
+          <h1>Historique</h1>
+          <p className="muted small">{games.length} partie{games.length > 1 ? 's' : ''} enregistrée{games.length > 1 ? 's' : ''}</p>
+        </div>
         <button type="button" className="btn btn-sm" onClick={() => setImportOpen(true)}>
           Importer un PGN
         </button>
@@ -96,7 +99,12 @@ export function History() {
           ))}
         </select>
       </div>
-      {shown.length === 0 && <p className="muted">Aucune partie pour l'instant. <a href="#/partie">Jouer une partie</a></p>}
+      {shown.length === 0 && (
+        <div className="card empty">
+          <p>Aucune partie ici pour l'instant.</p>
+          <a className="btn btn-primary" href="#/partie">Jouer une partie</a>
+        </div>
+      )}
       <div className="stack" style={{ gap: '.5rem' }} data-testid="game-list">
         {shown.map((g) => {
           const s = resultScore(g);

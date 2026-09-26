@@ -5,8 +5,9 @@ export function BotSelector({ elo, recommended, onChange, record }: { elo: numbe
   return (
     <div className="stack" style={{ gap: '.5rem' }}>
       <div className="bot-card">
-        <div className="bot-avatar">{p.name[0]}</div>
+        <div className="bot-avatar" style={{ background: p.elo < 1100 ? 'linear-gradient(135deg,#22c55e,#16a34a)' : p.elo < 1400 ? 'linear-gradient(135deg,#3b82f6,#1e5aa8)' : p.elo < 1650 ? 'linear-gradient(135deg,#a855f7,#7c3aed)' : 'linear-gradient(135deg,#ef4444,#b3261e)' }}>{p.name[0]}</div>
         <div>
+          <div className="tier">{p.elo < 1100 ? 'Débutant' : p.elo < 1400 ? 'Intermédiaire' : p.elo < 1650 ? 'Club' : 'Expert'}</div>
           <div>
             <strong>{p.name}</strong> · <span data-testid="bot-elo">{p.elo}</span> Elo{' '}
             {recommended === p.elo && <span className="tag tag-ok">recommandé</span>}

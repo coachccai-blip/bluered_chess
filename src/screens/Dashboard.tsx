@@ -12,11 +12,15 @@ import { Modal } from '../ui/Modal';
 import { Board } from '../board/Board';
 import { resultScore } from '../progress/profile';
 import { useInstallPrompt } from '../app/installPrompt';
+import { Ring } from '../ui/Ring';
+import { IconBoardEmpty, IconPlan, IconRadar, IconTrophy } from '../ui/icons';
 
 export function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [games, setGames] = useState<Game[]>([]);
+  const [totalGames, setTotalGames] = useState(0);
+  const [lastAccuracy, setLastAccuracy] = useState<number | null>(null);
   const { settings, palette, update } = useSettings();
   const current = useGame(useShallow((s) => ({ inProgress: s.records.length > 0 && !s.status.over, botElo: s.botElo, mode: s.mode, plies: s.records.length })));
   const { canInstall, installed, install } = useInstallPrompt();
@@ -26,6 +30,9 @@ export function Dashboard() {
       setProfile(await loadProfile(db));
       setPlan((await db.plans.orderBy('generatedAt').reverse().first()) ?? null);
       setGames(await db.games.orderBy('createdAt').reverse().limit(5).toArray());
+      setTotalGames(await db.games.count());
+      const lastAnalysis = await db.analyses.orderBy('createdAt').reverse().first();
+      setLastAccuracy(lastAnalysis ? lastAnalysis.accuracy : null);
     })();
   }, []);
 
@@ -42,12 +49,25 @@ export function Dashboard() {
     <div className="stack">
       {!profile.onboardingDone && <Onboarding profile={profile} onDone={(p) => setProfile(p)} onLevel={(elo) => void update({ defaultHeatmapMode: elo <= 800 ? 'P' : 'A' })} />}
       <div className="grid grid-2">
-        <div className="card">
-          <div className="muted small">Elo maison (estimation interne, à comparer prudemment avec Lichess)</div>
-          <div className="stat" data-testid="elo">{profile.estimatedElo}</div>
-          <p className="small muted">
-            {profile.gamesAnalyzed} partie{profile.gamesAnalyzed > 1 ? 's' : ''} analysée{profile.gamesAnalyzed > 1 ? 's' : ''} · série : {profile.streak.wins} V / {profile.streak.losses} D
-          </p>
+        <div className="card card-hero">
+          <div className="card-title">
+            <IconTrophy className="ico" />
+            <h3>Ma progression</h3>
+          </div>
+          <div className="row" style={{ gap: '1.2rem', marginBottom: '.6rem' }}>
+            <div>
+              <div className="muted small">Elo maison</div>
+              <div className="stat" data-testid="elo">{profile.estimatedElo}</div>
+              <div className="muted small">estimation interne, à comparer prudemment avec Lichess</div>
+            </div>
+            <Ring value={lastAccuracy ?? 0} label="Précision de la dernière partie" color="var(--green)" />
+          </div>
+          <div className="stat-tiles" style={{ marginBottom: '.8rem' }}>
+            <div className="stat-tile"><div className="label">Parties</div><div className="value">{totalGames}</div></div>
+            <div className="stat-tile"><div className="label">Analysées</div><div className="value">{profile.gamesAnalyzed}</div></div>
+            <div className="stat-tile"><div className="label">Série</div><div className="value">{profile.streak.wins > 0 ? `${profile.streak.wins} V` : profile.streak.losses > 0 ? `${profile.streak.losses} D` : '—'}</div></div>
+            <div className="stat-tile"><div className="label">Précision</div><div className="value">{lastAccuracy !== null ? `${Math.round(lastAccuracy)} %` : '—'}</div></div>
+          </div>
           <div className="btn-row">
             {current.inProgress && (
               <a className="btn btn-primary" href="#/partie" data-testid="resume-game">
@@ -76,9 +96,15 @@ export function Dashboard() {
           )}
         </div>
         <div className="card">
-          <h3>Radar de faiblesses</h3>
+          <div className="card-title">
+            <IconRadar className="ico" />
+            <h3>Radar de faiblesses</h3>
+          </div>
           {Object.keys(profile.indicators).length === 0 ? (
-            <p className="muted small">Analyse tes premières parties pour remplir le radar.</p>
+            <div className="empty">
+              <IconRadar />
+              <p>Analyse tes premières parties pour remplir le radar.</p>
+            </div>
           ) : (
             <>
               <Radar current={profile.indicators} previous={profile.previousIndicators} />
@@ -87,7 +113,7 @@ export function Dashboard() {
                   <div key={d.key} className={`indicator ${isAlert(d, profile.indicators[d.key]) ? 'alert' : ''}`} title={d.description}>
                     <span>{d.label}</span>
                     <span>
-                      <strong>{profile.indicators[d.key]}</strong> <span className="muted small">{d.unit}</span>{' '}
+                      <span className="val">{profile.indicators[d.key]}</span> <span className="muted small">{d.unit}</span>{' '}
                       {isAlert(d, profile.indicators[d.key]) ? <span className="tag tag-alert">à travailler</span> : <span className="tag tag-ok">ok</span>}
                     </span>
                   </div>
@@ -99,9 +125,15 @@ export function Dashboard() {
       </div>
       <div className="grid grid-2">
         <div className="card">
-          <h3>Plan du jour</h3>
+          <div className="card-title">
+            <IconPlan className="ico" />
+            <h3>Plan du jour</h3>
+          </div>
           {!plan ? (
-            <p className="muted small">Le plan d'entraînement apparaît après ta première partie analysée et se recalcule toutes les 5 parties.</p>
+            <div className="empty">
+              <IconPlan />
+              <p>Le plan d'entraînement apparaît après ta première partie analysée et se recalcule toutes les 5 parties.</p>
+            </div>
           ) : (
             <>
               <p className="small">
@@ -121,12 +153,20 @@ export function Dashboard() {
           )}
         </div>
         <div className="card">
-          <h3>Dernières parties</h3>
-          {games.length === 0 && <p className="muted small">Aucune partie.</p>}
+          <div className="card-title">
+            <IconBoardEmpty className="ico" />
+            <h3>Dernières parties</h3>
+          </div>
+          {games.length === 0 && (
+            <div className="empty">
+              <IconBoardEmpty />
+              <p>Aucune partie pour l'instant.</p>
+            </div>
+          )}
           {games.map((g) => {
             const s = resultScore(g);
             return (
-              <div key={g.id} className="row spread small" style={{ padding: '.25rem 0', borderBottom: '1px solid var(--border)' }}>
+              <div key={g.id} className="list-row">
                 <span>
                   <span className={`result ${s === 1 ? 'result-win' : s === 0 ? 'result-loss' : 'result-draw'}`} style={{ marginRight: '.4rem' }}>{s === 1 ? 'V' : s === 0 ? 'D' : 'N'}</span>
                   {g.playerColor === 'blue' ? 'Bleu' : 'Rouge'} {g.botElo ? `vs ${g.botElo}` : ''}
@@ -140,8 +180,13 @@ export function Dashboard() {
           </a>
         </div>
       </div>
-      <div className="card small muted">
-        Palette : {palette.name}. Les cases teintées en <span style={{ color: palette.w.piece, fontWeight: 700 }}>bleu</span> sont attaquées par le Bleu, en <span style={{ color: palette.b.piece, fontWeight: 700 }}>rouge</span> par le Rouge ; plus il y a d'attaquants, plus la teinte est soutenue.
+      <div className="card">
+        <div className="legend">
+          <span><i style={{ background: palette.w.overlay }} />attaquée par le Bleu</span>
+          <span><i style={{ background: palette.b.overlay }} />attaquée par le Rouge</span>
+          <span><i style={{ background: `linear-gradient(135deg, ${palette.w.overlay} 50%, ${palette.b.overlay} 50%)` }} />contestée</span>
+          <span className="muted">Plus il y a d'attaquants, plus la teinte est soutenue. Palette : {palette.name}.</span>
+        </div>
       </div>
     </div>
   );
@@ -158,6 +203,11 @@ function Onboarding({ profile, onDone, onLevel }: { profile: Profile; onDone: (p
   };
   return (
     <Modal title="Bienvenue dans BlueRed Chess">
+      <div className="steps" aria-hidden>
+        {[0, 1, 2].map((i) => (
+          <span key={i} className={i <= step ? 'on' : ''} />
+        ))}
+      </div>
       {step === 0 && (
         <div className="onboarding-step stack">
           <div className="big">

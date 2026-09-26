@@ -18,6 +18,9 @@ import { navigate } from '../app/router';
 import { sounds } from '../ui/sounds';
 import { colorLabel } from '../board/theme';
 import { Modal } from '../ui/Modal';
+import { Material } from '../ui/Material';
+import { Toast } from '../ui/Toast';
+import { IconList, IconKnight } from '../ui/icons';
 
 interface PendingSetup {
   mode: 'bot' | 'human';
@@ -37,6 +40,7 @@ export function Play() {
   const [drawMsg, setDrawMsg] = useState<string | null>(null);
   const [exerciseFeedback, setExerciseFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   /** Position consultée (null = direct). */
   const [viewPly, setViewPly] = useState<number | null>(null);
   const [botRecords, setBotRecords] = useState<Record<number, { wins: number; losses: number; draws: number }>>({});
@@ -147,7 +151,10 @@ export function Play() {
       startedAt: g.startedAt,
       mode: g.mode,
     })
-      .then((game) => g.setSavedGameId(game.id))
+      .then((game) => {
+        g.setSavedGameId(game.id);
+        setToast('Partie enregistrée dans l\'historique');
+      })
       .finally(() => setSaving(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [g.status.over, g.savedGameId]);
@@ -219,7 +226,7 @@ export function Play() {
   return (
     <div className="play-layout">
       <div>
-        <PlayerBar color={botColor ?? 'b'} name={vsBot ? `${botProfile.name} (${g.botElo})` : colorLabel('b', palette)} palette={palette} active={turn === (botColor ?? 'b') && !g.status.over} thinking={g.botThinking} flipped={g.flipped} top />
+        <PlayerBar color={g.flipped ? g.playerColor : (botColor ?? 'b')} name={g.flipped ? (vsBot ? `Moi (${playerLabel})` : colorLabel('w', palette)) : vsBot ? `${botProfile.name} (${g.botElo})` : colorLabel('b', palette)} palette={palette} active={turn === (g.flipped ? g.playerColor : (botColor ?? 'b')) && !g.status.over} thinking={!g.flipped && g.botThinking} fen={viewedFen} />
         <Board
           fen={viewedFen}
           flipped={g.flipped}
@@ -237,7 +244,7 @@ export function Play() {
           attackOptions={attackOptions}
           animations={settings.animations}
         />
-        <PlayerBar color={g.playerColor} name={vsBot ? `Moi (${playerLabel})` : colorLabel('w', palette)} palette={palette} active={turn === g.playerColor && !g.status.over} flipped={g.flipped} />
+        <PlayerBar color={g.flipped ? (botColor ?? 'b') : g.playerColor} name={g.flipped ? (vsBot ? `${botProfile.name} (${g.botElo})` : colorLabel('b', palette)) : vsBot ? `Moi (${playerLabel})` : colorLabel('w', palette)} palette={palette} active={turn === (g.flipped ? (botColor ?? 'b') : g.playerColor) && !g.status.over} thinking={g.flipped && g.botThinking} fen={viewedFen} />
         {settings.showEvalBar && evalCp !== null && (
           <div className="eval-bar" title={`Évaluation : ${(evalCp / 100).toFixed(1)}`} style={{ maxWidth: 'min(92vw, 640px)', margin: '.4rem auto' }}>
             <div style={{ width: `${50 + 50 * (2 / (1 + Math.exp(-0.00368208 * evalCp)) - 1)}%` }} />
@@ -261,7 +268,10 @@ export function Play() {
       <aside className="side-panel">
         <div className="card">
           <div className="row spread">
-            <strong data-testid="status">{statusText}</strong>
+            <span className="pill-status" data-testid="status">
+              {vsBot && turn === botColor && !g.status.over && <span className="pulse" />}
+              {statusText}
+            </span>
           </div>
           {engineError && (
             <p className="small" style={{ color: 'var(--red-2)' }}>
@@ -315,16 +325,29 @@ export function Play() {
           )}
         </div>
         <div className="card">
-          <h3>Coups</h3>
+          <div className="card-title">
+            <IconList className="ico" />
+            <h3>Coups</h3>
+          </div>
           <MoveList moves={g.records.map((r) => ({ ply: r.ply, san: r.san }))} current={viewPly ?? g.records.length} onSelect={(ply) => setViewPly(ply >= g.records.length ? null : ply)} />
         </div>
         <div className="card small muted">
+          <div className="card-title" style={{ color: 'var(--text)' }}>
+            <IconKnight className="ico" />
+            <h3>Lire la heatmap</h3>
+          </div>
+          <div className="legend" style={{ marginBottom: '.4rem' }}>
+            <span><i style={{ background: palette.w.overlay }} />attaquée par le Bleu</span>
+            <span><i style={{ background: palette.b.overlay }} />attaquée par le Rouge</span>
+            <span><i style={{ background: `linear-gradient(135deg, ${palette.w.overlay} 50%, ${palette.b.overlay} 50%)` }} />contestée</span>
+          </div>
           <strong>Heatmap :</strong> chiffres = nombre d'attaquants (Bleu en haut à gauche, Rouge en bas à droite). Anneau pulsant = pièce en prise. Raccourcis clavier A B R C P H X.
         </div>
       </aside>
 
+      <Toast text={toast} onDone={() => setToast(null)} />
       {setupOpen && (
-        <Modal title="Nouvelle partie" onClose={() => g.records.length > 0 && setSetupOpen(false)}>
+        <Modal title="Nouvelle partie" onClose={g.records.length > 0 ? () => setSetupOpen(false) : undefined}>
           <div className="stack">
             <div className="tabs">
               <button type="button" className={`tab ${setup.mode === 'bot' ? 'active' : ''}`} onClick={() => setSetup({ ...setup, mode: 'bot' })}>
@@ -366,15 +389,20 @@ export function Play() {
   );
 }
 
-function PlayerBar({ color, name, palette, active, thinking, flipped, top }: { color: Color; name: string; palette: ReturnType<typeof useSettings.getState>['palette']; active: boolean; thinking?: boolean; flipped: boolean; top?: boolean }) {
-  void flipped;
-  void top;
+function PlayerBar({ color, name, palette, active, thinking, fen }: { color: Color; name: string; palette: ReturnType<typeof useSettings.getState>['palette']; active: boolean; thinking?: boolean; fen: string }) {
   return (
-    <div className="player-bar" style={{ outline: active ? `2px solid ${palette[color].ring}` : 'none' }}>
+    <div className={`player-bar ${active ? 'active' : ''}`} style={{ ['--ring' as string]: palette[color].ring }}>
       <span className="side">
         <span className="dot" style={{ background: palette[color].piece }} /> {name}
       </span>
-      {thinking && <span className="thinking">réfléchit…</span>}
+      <span className="row" style={{ gap: '.5rem' }}>
+        <Material fen={fen} color={color} fill={palette[color === 'w' ? 'b' : 'w'].piece} />
+        {thinking && (
+          <span className="thinking">
+            <span className="pulse" style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} /> réfléchit…
+          </span>
+        )}
+      </span>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { allGamesPgn, backupFileName, downloadOrShare, exportBackup, importBacku
 import { encryptText } from '../data/crypto';
 import { HEATMAP_MODES } from '../board/ThreatOverlay';
 import { useInstallPrompt } from '../app/installPrompt';
+import { Switch } from '../ui/Switch';
 
 export function SettingsScreen() {
   const { settings, update } = useSettings();
@@ -47,17 +48,29 @@ export function SettingsScreen() {
   };
 
   const Toggle = ({ k, label }: { k: keyof typeof settings; label: string }) => (
-    <label className="field">
+    <div className="field" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', padding: '.55rem 0', borderBottom: '1px solid var(--border)' }}>
       <span>{label}</span>
-      <input type="checkbox" checked={Boolean(settings[k])} onChange={(e) => void update({ [k]: e.target.checked })} />
-    </label>
+      <Switch checked={Boolean(settings[k])} label={label} onChange={(v) => void update({ [k]: v })} />
+    </div>
   );
 
   return (
     <div className="stack">
-      <h1>Réglages</h1>
+      <div className="page-head">
+        <h1>Réglages</h1>
+      </div>
       <div className="card">
         <h3>Affichage</h3>
+        <label className="field">
+          <span>Thème</span>
+          <div className="segmented" role="radiogroup" aria-label="Thème">
+            {(['system', 'light', 'dark'] as const).map((m) => (
+              <button key={m} type="button" role="radio" aria-checked={settings.themeMode === m} className={settings.themeMode === m ? 'active' : ''} onClick={() => void update({ themeMode: m })}>
+                {m === 'system' ? 'Système' : m === 'light' ? 'Clair' : 'Sombre'}
+              </button>
+            ))}
+          </div>
+        </label>
         <label className="field">
           <span>Palette</span>
           <select value={settings.theme} onChange={(e) => void update({ theme: e.target.value as 'bluered' | 'colorblind' })}>

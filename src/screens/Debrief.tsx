@@ -20,6 +20,7 @@ import { explainWithLlm } from '../analysis/llmCoach';
 import { decryptText } from '../data/crypto';
 import type { HeatmapMode } from '../board/ThreatOverlay';
 import type { Square } from '../chess/types';
+import { Ring } from '../ui/Ring';
 
 export function Debrief({ id }: { id: string }) {
   const [game, setGame] = useState<Game | null>(null);
@@ -138,8 +139,11 @@ export function Debrief({ id }: { id: string }) {
 
   return (
     <div className="stack">
-      <div className="row spread">
-        <h1>Débrief</h1>
+      <div className="page-head">
+        <div>
+          <h1>Débrief</h1>
+          <p className="muted small">{game.playerColor === 'blue' ? 'Bleu' : 'Rouge'} {game.botElo ? `contre Bot ${game.botElo}` : ''} · {game.result} · {new Date(game.createdAt).toLocaleDateString('fr-FR')}</p>
+        </div>
         <div className="btn-row">
           <a className="btn btn-sm" href="#/historique">
             Historique
@@ -163,17 +167,17 @@ export function Debrief({ id }: { id: string }) {
       {analysis && (
         <div className="grid grid-2">
           <div className="card">
-            <div className="row">
+            <div className="row" style={{ gap: '1.2rem', marginBottom: '.6rem' }}>
+              <Ring value={analysis.summary.accuracy} label="Précision" color={analysis.summary.accuracy >= 80 ? 'var(--green)' : analysis.summary.accuracy >= 60 ? 'var(--accent)' : 'var(--red-2)'} />
               <div>
                 <div className="muted small">Précision</div>
                 <div className="stat" data-testid="accuracy">{analysis.summary.accuracy.toFixed(0)} %</div>
               </div>
-              <div>
-                <div className="muted small">Gaffes / erreurs / imprécisions</div>
-                <div className="stat">
-                  {analysis.summary.blunders} / {analysis.summary.mistakes} / {analysis.summary.inaccuracies}
-                </div>
-              </div>
+            </div>
+            <div className="stat-tiles" style={{ marginBottom: '.7rem' }}>
+              <div className="stat-tile"><div className="label">Gaffes</div><div className="value" style={{ color: '#e74c3c' }}>{analysis.summary.blunders}</div></div>
+              <div className="stat-tile"><div className="label">Erreurs</div><div className="value" style={{ color: '#e67e22' }}>{analysis.summary.mistakes}</div></div>
+              <div className="stat-tile"><div className="label">Imprécisions</div><div className="value" style={{ color: '#f1c40f' }}>{analysis.summary.inaccuracies}</div></div>
             </div>
             <p className="small">
               <strong>Phase la plus faible :</strong> {analysis.summary.weakestPhase ? PHASE_LABEL[analysis.summary.weakestPhase] : '—'}

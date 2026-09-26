@@ -82,6 +82,7 @@ export interface TrainingPlan {
 export interface Settings {
   id: 'settings';
   theme: 'bluered' | 'colorblind';
+  themeMode: 'system' | 'dark' | 'light';
   hatching: boolean;
   heatmapIntensity: number; // 0.5..1.5
   showCounts: boolean;
@@ -106,6 +107,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   id: 'settings',
   theme: 'bluered',
+  themeMode: 'system',
   hatching: false,
   heatmapIntensity: 1,
   showCounts: true,

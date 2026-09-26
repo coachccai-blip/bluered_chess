@@ -77,7 +77,12 @@ export function Training() {
 
   return (
     <div className="stack">
-      <h1>Entraînement</h1>
+      <div className="page-head">
+        <div>
+          <h1>Entraînement</h1>
+          <p className="muted small">10 minutes par jour sur tes deux points faibles.</p>
+        </div>
+      </div>
       {active?.kind === 'knight' && <BlindfoldExercise onClose={() => setActive(null)} />}
       {active?.kind === 'count' && <CountExercise onClose={() => setActive(null)} />}
       {active?.kind === 'hanging' && <HangingExercise pairs={pairs} onClose={() => setActive(null)} />}

@@ -84,9 +84,12 @@ export function buildMoveEval(rec: MoveRecord, before: PosEval, after: PosEval, 
   const isBest = bestLan === rec.lan;
   const mateAvailableBefore = before.mate !== null && before.mate > 0 ? before.mate : null;
   // Après le coup, c'est l'adversaire au trait : un mat négatif pour lui = mat toujours disponible pour moi.
-  const mateStillAvailableAfter = after.mate !== null && after.mate < 0;
+  // Un coup qui mate ne « rate » jamais le mat ; sinon un mat négatif pour l'adversaire = mat toujours disponible.
+  const mateStillAvailableAfter = rec.mate || (after.mate !== null && after.mate < 0);
   const mateAgainstAfter = after.mate !== null && after.mate > 0 ? after.mate : null;
-  const category = classifyMove({
+  const category = rec.mate
+    ? 'excellent'
+    : classifyMove({
     winProbLoss,
     isBest,
     isOnlyMove: legalMoves(rec.fenBefore).length === 1,

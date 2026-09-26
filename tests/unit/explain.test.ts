@@ -52,6 +52,8 @@ describe('explication du coup « Mieux »', () => {
     expect(spoken('O-O')).toBe('petit roque');
     expect(spoken('Qxf7#')).toBe('Dame prend f7 échec et mat');
     expect(spoken('e8=Q+')).toBe('e8 promotion Dame échec');
+    const [mate] = replayRecords('6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1', ['Ra8#']);
+    expect(describeLiveMove(mate, 'w')).toBe('Tu joues Tour a8 échec et mat. Échec et mat, la partie est terminée.');
     const [rec] = replayRecords('4k3/8/4p3/8/8/2N5/8/4K3 w - - 0 1', ['Nd5']);
     expect(describeLiveMove(rec, 'w')).toContain('Attention : le cavalier d5 est en prise');
   });

@@ -75,6 +75,15 @@ describe('motifs', () => {
   });
 });
 
+describe('coup qui donne mat', () => {
+  it('est classé excellent, jamais « mat raté »', () => {
+    const [rec] = replayRecords('6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1', ['Ra8#']);
+    const m = buildMoveEval(rec, { cpWhite: 9999, mate: 1, bestLan: 'a1a8', pv: ['a1a8'] }, { cpWhite: 10000, mate: 0, bestLan: null, pv: [] }, []);
+    expect(m.category).toBe('excellent');
+    expect(m.motifs).toEqual([]);
+  });
+});
+
 describe('coach', () => {
   it('construit une évaluation de coup et sélectionne des moments clés', () => {
     const records = replayRecords(START_FEN, ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Nd4', 'Nxe5', 'Qg5', 'Nxf7', 'Qxg2', 'Rf1', 'Qxe4+', 'Be2', 'Nf3#']);

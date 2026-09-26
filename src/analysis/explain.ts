@@ -207,6 +207,7 @@ export function describeLiveMove(rec: MoveRecord, playerColor: Color): string {
   const f = moveFeatures(rec.fenBefore, rec.lan);
   const who = mine ? 'Tu joues' : 'L\'adversaire joue';
   const parts = [`${who} ${spoken(rec.san)}.`];
+  if (rec.mate) return `${parts[0]} Échec et mat, la partie est terminée.`;
   if (f) {
     const purpose = describePurpose(f).filter((p) => !p.startsWith('développe') && !p.startsWith('prend le centre'));
     if (purpose.length) parts.push(`${cap(joinFr(purpose))}.`);

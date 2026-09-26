@@ -6,7 +6,7 @@ import { encryptText } from '../data/crypto';
 import { HEATMAP_MODES } from '../board/ThreatOverlay';
 import { useInstallPrompt } from '../app/installPrompt';
 import { Switch } from '../ui/Switch';
-import { hasVivienne, speak, stopSpeaking, useVoices } from '../ui/speech';
+import { hasVivienne, speak, stopSpeaking, useSpeechStatus, useVoices } from '../ui/speech';
 import { HdVoicePanel } from '../ui/HdVoicePanel';
 
 export function SettingsScreen() {
@@ -16,6 +16,7 @@ export function SettingsScreen() {
   const [apiKeyInput, setApiKeyInput] = useState('');
   const { canInstall, installed, install } = useInstallPrompt();
   const { voices, supported: voiceSupported } = useVoices();
+  const speechStatus = useSpeechStatus();
   const frVoices = voices.filter((v) => v.lang.toLowerCase().startsWith('fr'));
   const otherVoices = voices.filter((v) => !v.lang.toLowerCase().startsWith('fr'));
 
@@ -164,6 +165,9 @@ export function SettingsScreen() {
           <button type="button" className="btn btn-sm btn-ghost" onClick={stopSpeaking}>
             Stop
           </button>
+          {speechStatus.state === 'preparing' && <span className="muted small">préparation…</span>}
+          {speechStatus.state === 'speaking' && <span className="muted small">🔊 lecture ({speechStatus.engine === 'hd' ? 'voix HD' : 'navigateur'})</span>}
+          {speechStatus.state === 'error' && <span className="small" style={{ color: 'var(--red-2)' }}>{speechStatus.message}</span>}
         </div>
       </div>
       <div className="card">

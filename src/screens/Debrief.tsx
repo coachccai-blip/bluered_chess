@@ -21,6 +21,7 @@ import { decryptText } from '../data/crypto';
 import type { HeatmapMode } from '../board/ThreatOverlay';
 import type { Square } from '../chess/types';
 import { Ring } from '../ui/Ring';
+import { EvalBarVertical } from '../ui/EvalBarVertical';
 import { bestLineText, commentForMove, explainBest } from '../analysis/explain';
 import { openingAnnouncement, openingForGame, openingLabel } from '../chess/openings';
 import { speak, stopSpeaking } from '../ui/speech';
@@ -247,6 +248,8 @@ export function Debrief({ id }: { id: string }) {
       )}
       <div className="play-layout">
         <div>
+          <div className="board-row">
+          {settings.showEvalBar && moves.length > 0 && <EvalBarVertical cp={ply === 0 ? moves[0]?.evalBefore ?? 0 : (moves[ply - 1]?.evalAfter ?? null)} flipped={playerColor === 'b'} palette={palette} />}
           <Board
             fen={boardFen}
             flipped={playerColor === 'b'}
@@ -260,6 +263,7 @@ export function Debrief({ id }: { id: string }) {
             showLoose={settings.showLoose}
             hatching={settings.hatching}
           />
+          </div>
           <HeatmapToolbar mode={heat} onChange={setHeat} />
           <div className="btn-row" style={{ justifyContent: 'center' }}>
             <button type="button" className="btn btn-sm" onClick={() => setPly(0)}>

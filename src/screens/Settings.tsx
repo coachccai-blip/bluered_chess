@@ -173,7 +173,7 @@ export function SettingsScreen() {
       <div className="card">
         <h3>Partie et analyse</h3>
         <Toggle k="allowUndo" label="Autoriser « Annuler » contre les bots" />
-        <Toggle k="showEvalBar" label="Mini barre d'évaluation pendant la partie (peut « tricher »)" />
+        <Toggle k="showEvalBar" label="Barre d'avantage à gauche de l'échiquier pendant la partie (aide visible ; masquable d'un clic)" />
         <label className="field">
           <span>Profondeur d'analyse ({settings.analysisDepth}) : 12 sur mobile, 16 sur ordinateur</span>
           <input type="range" min={8} max={20} step={1} value={settings.analysisDepth} onChange={(e) => void update({ analysisDepth: parseInt(e.target.value, 10) })} />

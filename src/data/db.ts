@@ -28,9 +28,12 @@ export async function loadSettings(database: BlueRedDB = db): Promise<Settings> 
   const s = await database.settings.get('settings');
   const merged: Settings = { ...DEFAULT_SETTINGS, ...(s ?? {}) };
   // Migration v2 : le coach lit aussi son avis et l'explication du coup « Mieux » pendant la partie.
-  if ((s?.settingsVersion ?? 1) < 2) {
-    merged.liveComments = 'full';
-    merged.settingsVersion = 2;
+  const version = s?.settingsVersion ?? 1;
+  if (version < 2) merged.liveComments = 'full';
+  // Migration v3 : barre d'évaluation verticale affichée par défaut (masquable d'un clic).
+  if (version < 3) merged.showEvalBar = true;
+  if (version < 3) {
+    merged.settingsVersion = 3;
     await database.settings.put(merged);
   }
   return merged;

@@ -56,6 +56,12 @@ test('le bot 800 répond et la partie est analysable, y compris hors ligne', asy
   await page.goto('#/partie');
   await page.getByTestId('color-w').click();
   await page.getByTestId('start-game').click();
+  // Barre d'avantage visible par défaut, masquable et réaffichable.
+  await expect(page.getByTestId('evalbar')).toBeVisible();
+  await page.getByTestId('evalbar-toggle').click();
+  await expect(page.getByTestId('evalbar')).toHaveCount(0);
+  await page.getByTestId('evalbar-toggle').click();
+  await expect(page.getByTestId('evalbar')).toBeVisible();
   await move(page, 'e2', 'e4');
   // Commentaire en direct du coach sur mon coup.
   await expect(page.getByTestId('live-comment')).toContainText('Tu joues e4');
@@ -67,6 +73,8 @@ test('le bot 800 répond et la partie est analysable, y compris hors ligne', asy
   await context.setOffline(true);
   await move(page, 'd2', 'd4');
   await expect(page.locator('[data-testid="board"]')).toHaveAttribute('data-fen', / w /, { timeout: 30_000 });
+  // La barre reçoit une évaluation chiffrée du moteur.
+  await expect(page.getByTestId('evalbar')).toHaveAttribute('data-cp', /-?\d+/, { timeout: 30_000 });
   await page.getByTestId('resign').click();
   await expect(page.getByTestId('status')).toContainText('Abandon');
   await page.getByTestId('go-debrief').click();
@@ -142,4 +150,37 @@ test('voix HD : catalogue, Worker de synthèse et erreur réseau propre', async 
   expect(ort.status()).toBe(200);
   const piper = await page.request.get('tts/piper/piper_phonemize.wasm');
   expect(piper.status()).toBe(200);
+});
+
+test('flèches et cases marquées comme sur chess.com', async ({ page }) => {
+  await skipOnboarding(page);
+  await page.goto('#/partie');
+  await page.getByTestId('mode-human').click();
+  await page.getByTestId('start-game').click();
+  // Clic droit : marque la case e4.
+  await page.locator('[data-square="e4"]').click({ button: 'right', force: true });
+  await expect(page.locator('[data-usermark="e4"]')).toHaveCount(1);
+  // Clic droit glissé g1 -> f3 : flèche (l'échiquier doit être entièrement visible pour un vrai glisser).
+  await page.setViewportSize({ width: 1200, height: 1000 });
+  await page.getByTestId('board').scrollIntoViewIfNeeded();
+  const g1 = await page.locator('[data-square="g1"]').boundingBox();
+  const f3 = await page.locator('[data-square="f3"]').boundingBox();
+  await page.mouse.move(g1!.x + g1!.width / 2, g1!.y + g1!.height / 2);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(f3!.x + f3!.width / 2, f3!.y + f3!.height / 2, { steps: 5 });
+  await page.mouse.up({ button: 'right' });
+  await expect(page.locator('[data-userarrow="g1f3"]')).toHaveCount(1);
+  // Clic gauche dans le vide (case sans pièce) : tout disparaît.
+  await page.locator('[data-square="d5"]').click({ force: true });
+  await expect(page.locator('[data-usermark="e4"]')).toHaveCount(0);
+  await expect(page.locator('[data-userarrow="g1f3"]')).toHaveCount(0);
+  // Mode crayon : clic gauche marque, la pièce n'est pas sélectionnée.
+  await page.getByTestId('draw-toggle').click();
+  await page.locator('[data-square="e2"]').click({ force: true });
+  await expect(page.locator('[data-usermark="e2"]')).toHaveCount(1);
+  await expect(page.locator('[data-dest]')).toHaveCount(0);
+  await page.getByTestId('draw-toggle').click();
+  // Le jeu fonctionne toujours après désactivation du crayon.
+  await move(page, 'e2', 'e4');
+  await expect(page.getByTestId('move-list')).toContainText('e4');
 });

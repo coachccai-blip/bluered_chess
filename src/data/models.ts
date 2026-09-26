@@ -122,6 +122,8 @@ export interface Settings {
   animations: boolean;
   allowUndo: boolean;
   showEvalBar: boolean;
+  /** Barre d'avantage dans le débrief (indépendante de celle de la partie). */
+  showEvalBarDebrief: boolean;
   analysisDepth: number;
   /** Voix du coach. */
   voiceEnabled: boolean;
@@ -161,6 +163,7 @@ export const DEFAULT_SETTINGS: Settings = {
   animations: true,
   allowUndo: true,
   showEvalBar: true,
+  showEvalBarDebrief: true,
   analysisDepth: typeof navigator !== 'undefined' && /Mobi|Android/i.test(navigator.userAgent) ? 12 : 16,
   voiceEnabled: true,
   voiceRate: 1,

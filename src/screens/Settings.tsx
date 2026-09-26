@@ -189,6 +189,7 @@ export function SettingsScreen() {
         <p className="muted small">« Gaffes graves » : pièce laissée en prise, capture perdante ou mat en 1 permis. « Tout » ajoute les pions. Désactive-le quand tu n'en as plus besoin : c'est une roulette d'apprentissage.</p>
         <Toggle k="allowUndo" label="Autoriser « Annuler » contre les bots" />
         <Toggle k="showEvalBar" label="Barre d'avantage à gauche de l'échiquier pendant la partie (aide visible ; masquable d'un clic)" />
+        <Toggle k="showEvalBarDebrief" label="Barre d'avantage dans le débrief" />
         <label className="field">
           <span>Profondeur d'analyse ({settings.analysisDepth}) : 12 sur mobile, 16 sur ordinateur</span>
           <input type="range" min={8} max={20} step={1} value={settings.analysisDepth} onChange={(e) => void update({ analysisDepth: parseInt(e.target.value, 10) })} />

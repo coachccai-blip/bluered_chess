@@ -89,6 +89,8 @@ gravité (`phrases.ts`). Coach LLM optionnel avec la clé de l'utilisateur (mome
 **Commentaires et voix.** `explain.ts` décrit chaque coup (capture, échec, roque, pièce sauvée/défendue, menace, développement)
 et explique pourquoi le coup « Mieux » est meilleur (but du coup, réplique adverse après le coup joué, suite prévue, évaluations) ;
 après un coup simplement « bon » du joueur, le meilleur coup est nommé et expliqué avec un ton doux (en direct comme au débrief).
+`moveFeatures` affine le diagnostic « en prise » (`refineHanging`) : défenses par batterie (rayon X) comptées, cavalier/fou = échange
+égal ; la phrase dit « pas protégé », « avec une pièce qui vaut moins » ou « pas assez défendu » selon le cas.
 `analyzeGame` conserve la variante principale (`bestLine`) et la meilleure réplique (`threat`). `speech.ts` utilise la Web Speech API
 et préfère la voix « Vivienne » (Microsoft, fr-FR) si elle est installée. Réglages : `voiceEnabled`, `voiceName`, `voiceRate`,
 `liveComments` (off / descriptive / full), `autoReadDebrief`, `hdVoiceId`.

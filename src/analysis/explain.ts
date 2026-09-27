@@ -2,6 +2,24 @@
 // Pur (sans React), fondé sur la carte d'attaques et la variante du moteur.
 import { Chess } from 'chess.js';
 import { computeAttacks, findForks, parseFenBoard } from '../chess/attacks';
+import type { HangingPiece } from '../chess/types';
+
+type HangingReason = HangingPiece['reason'];
+
+/**
+ * Affine le diagnostic « en prise » en comptant les défenses par rayon X (batterie derrière une pièce alliée) :
+ * une pièce dite « non protégée » mais défendue par une batterie n'est pas gratuite. Null si elle n'est finalement pas en prise.
+ */
+function refineHanging(h: HangingPiece, xray: ReturnType<typeof computeAttacks>): HangingReason | null {
+  const defenders = xray.map[h.square][h.color].length;
+  if (defenders === 0) return 'undefended';
+  const value = PIECE_VALUES[h.type];
+  const minAttacker = Math.min(...h.attackers.map((a) => PIECE_VALUES[a.piece]));
+  // Cavalier contre fou (ou l'inverse) : pas une « pièce de moindre valeur », c'est un échange égal.
+  if (value - minAttacker >= 100) return 'lower-value-attacker';
+  if (h.attackers.length > defenders && minAttacker <= value + 50) return 'outnumbered';
+  return null;
+}
 import { staticExchange } from '../chess/see';
 import { PIECE_VALUES, opposite, type Color, type PieceSymbol, type Square } from '../chess/types';
 import { PIECE_NAME_FR } from './motifs';
@@ -29,7 +47,7 @@ export interface MoveFeatures {
   /** Pièces alliées en prise avant et défendues (ou plus attaquées) après. */
   defends: { piece: PieceSymbol; square: Square }[];
   /** Pièces adverses nouvellement attaquées et non défendues (ou plus précieuses). */
-  attacks: { piece: PieceSymbol; square: Square }[];
+  attacks: { piece: PieceSymbol; square: Square; reason: HangingReason }[];
   fork: boolean;
   develops: boolean;
   centralizes: boolean;
@@ -51,6 +69,7 @@ export function moveFeatures(fen: string, lan: string): MoveFeatures | null {
   const fenAfter = c.fen();
   const before = computeAttacks(fen);
   const after = computeAttacks(fenAfter);
+  const afterXray = computeAttacks(fenAfter, { xray: true });
   const boardAfter = parseFenBoard(fenAfter);
   const from = m.from as Square;
   const to = m.to as Square;
@@ -58,12 +77,13 @@ export function moveFeatures(fen: string, lan: string): MoveFeatures | null {
 
   const wasHanging = before.hanging.find((h) => h.square === from && h.color === me);
   const myHangingBefore = before.hanging.filter((h) => h.color === me && h.square !== from);
-  const myHangingAfter = after.hanging.filter((h) => h.color === me);
+  const myHangingAfter = after.hanging.filter((h) => h.color === me && refineHanging(h, afterXray) !== null);
   const defends = myHangingBefore.filter((h) => !myHangingAfter.some((a) => a.square === h.square)).map((h) => ({ piece: h.type, square: h.square }));
   const oppHangingBefore = new Set(before.hanging.filter((h) => h.color === opp).map((h) => h.square));
   const attacks = after.hanging
     .filter((h) => h.color === opp && !oppHangingBefore.has(h.square) && after.map[h.square][me].some((a) => a.from === to))
-    .map((h) => ({ piece: h.type, square: h.square }));
+    .map((h) => ({ piece: h.type, square: h.square, reason: refineHanging(h, afterXray) }))
+    .filter((a): a is { piece: PieceSymbol; square: Square; reason: HangingReason } => a.reason !== null);
   const forks = findForks(boardAfter, after.map, me).filter((f) => f.by.square === to);
   let captureGain = 0;
   if (m.captured) {
@@ -123,7 +143,13 @@ export function describePurpose(f: MoveFeatures, mine = true): string[] {
   if (f.escapes) out.push(`sauve ${poss(f.escapes, mine)} qui allait être pris${f.escapes === 'q' || f.escapes === 'r' ? 'e' : ''}`);
   for (const d of f.defends.slice(0, 2)) out.push(`protège ${poss(d.piece, mine)} ${d.square}`);
   if (f.fork) out.push('attaque deux pièces en même temps');
-  else for (const a of f.attacks.slice(0, 2)) out.push(`attaque ${poss(a.piece, !mine)} ${a.square}, qui n'est pas protégé${a.piece === 'q' || a.piece === 'r' ? 'e' : ''}`);
+  else
+    for (const a of f.attacks.slice(0, 2)) {
+      const fem = a.piece === 'q' || a.piece === 'r' ? 'e' : '';
+      if (a.reason === 'undefended') out.push(`attaque ${poss(a.piece, !mine)} ${a.square}, qui n'est pas protégé${fem}`);
+      else if (a.reason === 'lower-value-attacker') out.push(`attaque ${poss(a.piece, !mine)} ${a.square} avec ${poss(f.promotion ?? f.piece, mine)}, une pièce qui vaut moins`);
+      else out.push(`attaque ${poss(a.piece, !mine)} ${a.square}, qui n'est pas assez défendu${fem}`);
+    }
   if (out.length === 0) {
     if (f.develops) out.push(`sort ${poss(f.piece, mine)}`);
     if (f.centralizes) out.push('prend le centre');

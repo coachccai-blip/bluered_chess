@@ -94,7 +94,10 @@ Les explications du coup « Mieux » (`explainBest`) sont en mots simples, sans 
 `hdVoice.ts` est le client (téléchargement avec progression, stockage OPFS, synthèse) ; `hdVoiceCatalog.ts` liste les voix
 françaises. Les fichiers moteur (`public/tts/ort/`, `public/tts/piper/`, ~33 Mo) sont copiés par `scripts/copy-engine.mjs`,
 exclus du pré-cache et mis en cache à la demande (Workbox CacheFirst). Les modèles viennent de huggingface.co
-(`diffusionstudio/piper-voices`). `speak()` utilise la voix HD active, sinon la voix du navigateur.
+(`diffusionstudio/piper-voices`). `speak()` utilise la voix HD active, sinon la voix du navigateur. Fluidité : lecture **par phrase**
+(la première phrase part dès qu'elle est prête, les suivantes se synthétisent pendant la lecture), file à priorité dans `hdVoice.ts`
+(lecture = 10, pré-génération = 0), cache audio mémoire + IndexedDB (table `audio`, ~600 entrées max), `prefetchSpeech` pré-génère
+les commentaires de tout le débrief à partir de la position affichée, `warmupSpeech` précharge le moteur 2,5 s après le démarrage.
 
 **Apprentissage en jouant.** `analysis/risk.ts` : filet anti-gaffe (`assessMoveRisk`, réglage `blunderCheck` off / blunders / all)
 qui demande confirmation avant un coup laissant une pièce en prise, une capture perdante ou un mat en 1 (jamais en mode exercice).

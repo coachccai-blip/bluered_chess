@@ -53,20 +53,103 @@ function call<T>(msg: Record<string, unknown>, onProgress?: (p: Progress) => voi
   });
 }
 
+// File de synthèse à priorité : une lecture demandée par l'utilisateur passe devant les pré-générations.
+type Job = { run: () => Promise<void>; priority: number; cancelled?: boolean };
+const queue: Job[] = [];
+let running = false;
+
+async function pump(): Promise<void> {
+  if (running) return;
+  running = true;
+  try {
+    while (queue.length) {
+      queue.sort((a, b) => b.priority - a.priority);
+      const job = queue.shift()!;
+      if (job.cancelled) continue;
+      await job.run();
+    }
+  } finally {
+    running = false;
+  }
+}
+
+function enqueue<T>(priority: number, fn: () => Promise<T>): Promise<T> & { cancel: () => void } {
+  let job: Job;
+  const p = new Promise<T>((resolve, reject) => {
+    job = { priority, run: () => fn().then(resolve, reject) };
+    queue.push(job);
+    void pump();
+  }) as Promise<T> & { cancel: () => void };
+  p.cancel = () => {
+    job.cancelled = true;
+  };
+  return p;
+}
+
+/** Annule les synthèses de basse priorité en attente (pré-générations). */
+export function cancelPrefetch(): void {
+  for (const j of queue) if (j.priority <= 0) j.cancelled = true;
+}
+
 export const hdVoice = {
   stored: () => call<string[]>({ type: 'stored' }),
   download: (voiceId: string, onProgress?: (p: Progress) => void) => call<void>({ type: 'download', voiceId }, onProgress),
   remove: (voiceId: string) => call<void>({ type: 'remove', voiceId }),
-  warmup: (voiceId: string, onProgress?: (p: Progress) => void) => call<void>({ type: 'warmup', voiceId, wasmPaths: wasmPaths() }, onProgress),
-  synthesize: (voiceId: string, text: string, onProgress?: (p: Progress) => void) => call<Blob>({ type: 'predict', voiceId, text, wasmPaths: wasmPaths() }, onProgress),
+  warmup: (voiceId: string, onProgress?: (p: Progress) => void) => enqueue(5, () => call<void>({ type: 'warmup', voiceId, wasmPaths: wasmPaths() }, onProgress)),
+  /** Synthèse ; priorité 10 = lecture immédiate, 0 = pré-génération. */
+  synthesize: (voiceId: string, text: string, priority = 10) => enqueue(priority, () => call<Blob>({ type: 'predict', voiceId, text, wasmPaths: wasmPaths() })),
+  pendingCount: () => queue.filter((j) => !j.cancelled).length,
 };
 
-// Petit cache mémoire des phrases déjà synthétisées (relecture instantanée).
+// Cache mémoire (accès immédiat) doublé d'un cache persistant dans IndexedDB (relecture instantanée d'une partie déjà vue).
 const audioCache = new Map<string, Blob>();
+const MEMORY_MAX = 200;
+const PERSISTENT_MAX = 600;
+
 export function cachedAudio(key: string): Blob | undefined {
   return audioCache.get(key);
 }
+
+export async function cachedAudioAsync(key: string): Promise<Blob | undefined> {
+  const mem = audioCache.get(key);
+  if (mem) return mem;
+  try {
+    const { db } = await import('../data/db');
+    const entry = await db.audio.get(key);
+    if (entry) {
+      audioCache.set(key, entry.blob);
+      return entry.blob;
+    }
+  } catch {
+    /* IndexedDB indisponible */
+  }
+  return undefined;
+}
+
 export function rememberAudio(key: string, blob: Blob): void {
   audioCache.set(key, blob);
-  if (audioCache.size > 40) audioCache.delete(audioCache.keys().next().value as string);
+  if (audioCache.size > MEMORY_MAX) audioCache.delete(audioCache.keys().next().value as string);
+  void (async () => {
+    try {
+      const { db } = await import('../data/db');
+      await db.audio.put({ key, blob, createdAt: Date.now(), size: blob.size });
+      const count = await db.audio.count();
+      if (count > PERSISTENT_MAX) {
+        const oldest = await db.audio.orderBy('createdAt').limit(count - PERSISTENT_MAX + 50).primaryKeys();
+        await db.audio.bulkDelete(oldest as string[]);
+      }
+    } catch {
+      /* quota ou stockage indisponible */
+    }
+  })();
+}
+
+export async function clearAudioCache(): Promise<void> {
+  audioCache.clear();
+  try {
+    const { db } = await import('../data/db');
+    await db.audio.clear();
+  } catch {
+    /* ignore */
+  }
 }

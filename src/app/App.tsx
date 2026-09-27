@@ -11,6 +11,7 @@ import { Training } from '../screens/Training';
 import { SettingsScreen } from '../screens/Settings';
 import { About } from '../screens/About';
 import { requestPersistentStorage } from '../data/db';
+import { warmupSpeech } from '../ui/speech';
 
 export function App() {
   const route = useRoute();
@@ -20,6 +21,12 @@ export function App() {
     void load();
     void requestPersistentStorage();
   }, [load]);
+  // Voix HD : chargement anticipé, après le moteur d'échecs, pour éviter l'attente au premier commentaire.
+  useEffect(() => {
+    if (!loaded) return;
+    const t = window.setTimeout(warmupSpeech, 2500);
+    return () => window.clearTimeout(t);
+  }, [loaded]);
   if (!loaded) return <div className="loading">Chargement…</div>;
   let screen: JSX.Element;
   switch (route.name) {

@@ -1,6 +1,14 @@
 // IndexedDB via Dexie : seule mémoire de l'application.
 import Dexie, { type Table } from 'dexie';
 import type { Analysis, Drill, Game, Profile, Settings, TrainingPlan } from './models';
+
+/** Entrée du cache audio (voix HD) : clé = voix + texte. */
+export interface AudioEntry {
+  key: string;
+  blob: Blob;
+  createdAt: number;
+  size: number;
+}
 import { DEFAULT_PROFILE, DEFAULT_SETTINGS } from './models';
 import { ensureRatings } from '../progress/ratings';
 
@@ -11,6 +19,7 @@ export class BlueRedDB extends Dexie {
   plans!: Table<TrainingPlan, string>;
   settings!: Table<Settings, string>;
   drills!: Table<Drill, string>;
+  audio!: Table<AudioEntry, string>;
 
   constructor(name = 'bluered-chess') {
     super(name);
@@ -28,6 +37,15 @@ export class BlueRedDB extends Dexie {
       plans: 'id, generatedAt',
       settings: 'id',
       drills: 'id, gameId, due, box',
+    });
+    this.version(3).stores({
+      games: 'id, createdAt, botElo, result, playerColor',
+      analyses: 'id, gameId, createdAt',
+      profile: 'id',
+      plans: 'id, generatedAt',
+      settings: 'id',
+      drills: 'id, gameId, due, box',
+      audio: 'key, createdAt',
     });
   }
 }

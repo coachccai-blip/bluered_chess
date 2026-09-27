@@ -28,7 +28,7 @@ import { winProbability } from '../analysis/winprob';
 import { lineScore } from '../engine/engineClient';
 import { bestLineText, commentForMove, explainBest } from '../analysis/explain';
 import { openingAnnouncement, openingForGame, openingLabel } from '../chess/openings';
-import { speak, stopSpeaking } from '../ui/speech';
+import { prefetchSpeech, speak, stopSpeaking, type PrefetchHandle } from '../ui/speech';
 
 export function Debrief({ id }: { id: string }) {
   const [game, setGame] = useState<Game | null>(null);
@@ -51,6 +51,8 @@ export function Debrief({ id }: { id: string }) {
   const [guessFeedback, setGuessFeedback] = useState<string | null>(null);
   const [guessBusy, setGuessBusy] = useState(false);
   const [drawMode, setDrawMode] = useState(false);
+  const [prep, setPrep] = useState<{ done: number; total: number } | null>(null);
+  const prefetchRef = useRef<PrefetchHandle | null>(null);
   const readingRef = useRef(false);
 
   useEffect(() => {
@@ -128,6 +130,26 @@ export function Debrief({ id }: { id: string }) {
     return prefix + commentForMove(m, playerColor);
   };
   const commentText = ply > 0 ? commentAt(ply) : null;
+
+  // Pré-génération de la voix HD pour tous les coups, en partant de la position affichée (proche d'abord).
+  useEffect(() => {
+    if (!analysis || !settings.voiceEnabled || !settings.hdVoiceId) return;
+    const n = analysis.moves.length;
+    const order: number[] = [];
+    for (let d = 0; d < n; d++) {
+      const a = ply + d;
+      const b = ply - d;
+      if (a >= 1 && a <= n) order.push(a);
+      if (d > 0 && b >= 1 && b <= n) order.push(b);
+    }
+    const texts = order.map((i) => commentAt(i)).filter((t): t is string => !!t);
+    prefetchRef.current?.cancel();
+    const h = prefetchSpeech(texts, (done, total) => setPrep({ done, total }));
+    prefetchRef.current = h;
+    return () => h.cancel();
+    // Relancer seulement quand l'analyse ou la voix change (l'ordre part de la position courante au moment du lancement).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysis?.id, settings.voiceEnabled, settings.hdVoiceId]);
   const fast = analysis && game ? fastMistakes(analysis, game.thinkTimes, playerColor) : null;
   // Devine le coup : position avant un coup du joueur, échiquier jouable, verdict du moteur sur la proposition.
   const guessTarget = guessMode && ply < moves.length && moves[ply]?.color === playerColor ? moves[ply] : null;
@@ -406,6 +428,12 @@ export function Debrief({ id }: { id: string }) {
                   Relire ce coup
                 </button>
               )}
+              {prep && prep.done < prep.total && (
+                <span className="muted small" data-testid="voice-prep">
+                  🔊 préparation des commentaires… {prep.done}/{prep.total}
+                </span>
+              )}
+              {prep && prep.total > 0 && prep.done >= prep.total && <span className="tag tag-ok" data-testid="voice-ready">voix prête</span>}
             </div>
           )}
           {currentMove && (

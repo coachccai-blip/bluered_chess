@@ -1,7 +1,7 @@
 // Synthèse vocale du navigateur (Web Speech API) : gratuite, locale, aucune clé.
 // Préfère la voix « Vivienne » (Microsoft, français neuronal) si elle est installée, sinon la meilleure voix française.
 import { useEffect, useState } from 'react';
-import { cachedAudio, hdVoice, hdVoiceSupported, rememberAudio } from './hdVoice';
+import { cachedAudio, cachedAudioAsync, cancelPrefetch, hdVoice, hdVoiceSupported, rememberAudio } from './hdVoice';
 
 export interface VoiceInfo {
   name: string;
@@ -159,16 +159,20 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<void
   if (hd && hdVoiceSupported()) {
     try {
       setStatus({ state: 'preparing', engine: 'hd' });
-      const key = `${hd}|${text}`;
-      let blob = cachedAudio(key);
-      if (!blob) {
-        blob = await hdVoice.synthesize(hd, text);
-        rememberAudio(key, blob);
+      // Lecture par phrase : la première phrase part dès qu'elle est prête, les suivantes se synthétisent pendant la lecture.
+      const chunks = splitSentences(text, HD_CHUNK_MAX);
+      const rate = opts.rate ?? prefs.rate;
+      const fetchChunk = (chunk: string) => getHdAudio(hd, chunk, 10);
+      let next: Promise<Blob> | null = fetchChunk(chunks[0]);
+      for (let i = 0; i < chunks.length; i++) {
+        const blob = await next!;
+        if (my !== speakSeq) return; // une autre lecture a pris le relais
+        next = i + 1 < chunks.length ? fetchChunk(chunks[i + 1]) : null;
+        setStatus({ state: 'speaking', engine: 'hd' });
+        await playBlob(blob, rate);
+        if (my !== speakSeq) return;
       }
-      if (my !== speakSeq) return; // une autre lecture a pris le relais
-      setStatus({ state: 'speaking', engine: 'hd' });
-      await playBlob(blob, opts.rate ?? prefs.rate);
-      if (my === speakSeq) setStatus({ state: 'idle' });
+      setStatus({ state: 'idle' });
       opts.onEnd?.();
       return;
     } catch (e) {
@@ -210,6 +214,75 @@ function playBlob(blob: Blob, rate: number): Promise<void> {
       reject(new Error(err?.name === 'NotAllowedError' ? 'le navigateur bloque le son tant que tu n\'as pas cliqué dans la page' : err?.message || 'lecture impossible'));
     });
   });
+}
+
+/** Longueur maximale d'un morceau synthétisé par la voix HD (court = démarrage rapide). */
+const HD_CHUNK_MAX = 110;
+
+/** Audio HD d'un morceau : cache mémoire, puis IndexedDB, sinon synthèse. */
+async function getHdAudio(voiceId: string, chunk: string, priority: number): Promise<Blob> {
+  const key = `${voiceId}|${chunk}`;
+  const cached = cachedAudio(key) ?? (await cachedAudioAsync(key));
+  if (cached) return cached;
+  const blob = await hdVoice.synthesize(voiceId, chunk, priority);
+  rememberAudio(key, blob);
+  return blob;
+}
+
+/** Vérifie si tout un texte est déjà en cache (mémoire ou IndexedDB). */
+export async function isPrepared(text: string): Promise<boolean> {
+  const hd = prefs.hdVoiceId;
+  if (!hd || !hdVoiceSupported()) return true;
+  for (const c of splitSentences(text, HD_CHUNK_MAX)) if (!(await cachedAudioAsync(`${hd}|${c}`))) return false;
+  return true;
+}
+
+export interface PrefetchHandle {
+  cancel: () => void;
+  done: Promise<void>;
+}
+
+/**
+ * Pré-génère en tâche de fond l'audio d'une liste de textes (priorité basse : une lecture demandée passe devant).
+ * `onProgress(done, total)` est appelé après chaque texte.
+ */
+export function prefetchSpeech(texts: string[], onProgress?: (done: number, total: number) => void): PrefetchHandle {
+  const hd = prefs.hdVoiceId;
+  let cancelled = false;
+  const done = (async () => {
+    if (!hd || !hdVoiceSupported()) {
+      onProgress?.(texts.length, texts.length);
+      return;
+    }
+    let n = 0;
+    for (const t of texts) {
+      if (cancelled) return;
+      try {
+        for (const c of splitSentences(t, HD_CHUNK_MAX)) {
+          if (cancelled) return;
+          await getHdAudio(hd, c, 0);
+        }
+      } catch {
+        /* on continue avec le texte suivant */
+      }
+      n++;
+      onProgress?.(n, texts.length);
+    }
+  })();
+  return {
+    cancel: () => {
+      cancelled = true;
+      cancelPrefetch();
+    },
+    done,
+  };
+}
+
+/** Préchauffe le moteur de la voix HD (chargement WASM + modèle) pour que la première phrase parte vite. */
+export function warmupSpeech(): void {
+  const hd = prefs.hdVoiceId;
+  if (!hd || !hdVoiceSupported()) return;
+  void hdVoice.warmup(hd).catch(() => {});
 }
 
 /** Découpe en phrases courtes : Chrome coupe les longues lectures après ~15 s. */

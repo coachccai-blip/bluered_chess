@@ -8,6 +8,7 @@ import { useInstallPrompt } from '../app/installPrompt';
 import { Switch } from '../ui/Switch';
 import { hasVivienne, speak, stopSpeaking, useSpeechStatus, useVoices } from '../ui/speech';
 import { HdVoicePanel } from '../ui/HdVoicePanel';
+import { clearAudioCache } from '../ui/hdVoice';
 
 export function SettingsScreen() {
   const { settings, update } = useSettings();
@@ -164,6 +165,9 @@ export function SettingsScreen() {
           </button>
           <button type="button" className="btn btn-sm btn-ghost" onClick={stopSpeaking}>
             Stop
+          </button>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={() => void clearAudioCache()} title="Les phrases déjà synthétisées sont gardées pour une relecture instantanée">
+            Vider le cache audio
           </button>
           {speechStatus.state === 'preparing' && <span className="muted small">préparation…</span>}
           {speechStatus.state === 'speaking' && <span className="muted small">🔊 lecture ({speechStatus.engine === 'hd' ? 'voix HD' : 'navigateur'})</span>}

@@ -18,6 +18,24 @@ describe('caractéristiques d\'un coup', () => {
     expect(describePurpose(dev)[0]).toBe('sort ton cavalier');
     expect(moveFeatures(START_FEN, 'e2e5')).toBeNull();
   });
+  it('ne dit pas « pas protégé » quand la pièce attaquée est défendue', () => {
+    // Cg5-e6 attaque la dame d8, défendue par la tour d7 : la dame est attaquée par une pièce de moindre valeur, pas « non protégée ».
+    const f = moveFeatures('3qk3/2pr4/8/6N1/8/8/8/4K3 w - - 0 1', 'g5e6')!;
+    const attackQueen = f.attacks.find((a) => a.square === 'd8')!;
+    expect(attackQueen.reason).toBe('lower-value-attacker');
+    const text = describePurpose(f).join(' ');
+    expect(text).toContain('attaque sa dame d8 avec ton cavalier, une pièce qui vaut moins');
+    expect(text).not.toContain("n'est pas protégé");
+    // Même cavalier contre un fou défendu par un pion : pas une attaque à signaler (échange égal, pièce protégée).
+    const g = moveFeatures('4k3/2p5/3b4/6N1/8/8/8/4K3 w - - 0 1', 'g5e4')!;
+    expect(g.attacks.find((a) => a.square === 'd6')).toBeUndefined();
+    // Fou vraiment non protégé : la formule reste correcte.
+    const h = moveFeatures('4k3/8/3b4/6N1/8/8/8/4K3 w - - 0 1', 'g5e4')!;
+    expect(describePurpose(h).join(' ')).toContain("attaque son fou d6, qui n'est pas protégé");
+    // Défense par batterie (rayon X) : tour d4 attaquée par la dame d8, défendue par la tour d1 derrière la dame d2.
+    const x = moveFeatures('3qk3/8/8/8/3R4/8/3Q4/3RK3 b - - 0 1', 'e8f8')!;
+    expect(x.attacks.find((a) => a.square === 'd4')).toBeUndefined();
+  });
   it('détecte une pièce sauvée et une pièce laissée en prise', () => {
     // Cavalier blanc d5 attaqué par le pion e6 ; Cd5-f4 le sauve, Ke1-e2 le laisse en prise.
     const fen = '4k3/8/4p3/3N4/8/8/8/4K3 w - - 0 1';

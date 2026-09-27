@@ -328,6 +328,11 @@ export function Debrief({ id }: { id: string }) {
                 <span className={`tag ${game.goal.achieved ? 'tag-ok' : 'tag-alert'}`}>{game.goal.achieved ? 'Objectif atteint' : 'Objectif manqué'}</span> {game.goal.label}. {game.goal.detail}
               </p>
             )}
+            {game.hints !== undefined && game.hints > 0 && (
+              <p className="small" data-testid="hints-used">
+                <span className="tag">Indices</span> {game.hints} indice{game.hints > 1 ? 's' : ''} demandé{game.hints > 1 ? 's' : ''} pendant la partie.
+              </p>
+            )}
             {fast && fast.total > 0 && (
               <p className="small" data-testid="fast-mistakes">
                 <span className={`tag ${fast.fast > 0 ? 'tag-alert' : 'tag-ok'}`}>Réflexion</span> {fast.fast} de tes {fast.total} erreur{fast.total > 1 ? 's' : ''} {fast.fast > 1 ? 'ont été jouées' : 'a été jouée'} en moins de 3 secondes.{fast.fast > 0 ? ' Prends le temps de vérifier les pièces en prise avant de jouer.' : ' Bonne discipline de réflexion.'}

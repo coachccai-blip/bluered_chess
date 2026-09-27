@@ -42,6 +42,8 @@ export interface Game {
   thinkTimes?: number[];
   /** Cadence jouée (absente = illimité). */
   timeControl?: TimeControl;
+  /** Indices demandés pendant la partie. */
+  hints?: number;
   /** Objectif de la partie (tiré du plan), vérifié à l'analyse. */
   goal?: GameGoal;
 }

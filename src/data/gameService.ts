@@ -22,6 +22,7 @@ export interface FinishedGameInput {
   mode: 'bot' | 'human' | 'exercise' | 'explore';
   goal?: GameGoal | null;
   timeControl?: TimeControl;
+  hints?: number;
 }
 
 export async function saveFinishedGame(input: FinishedGameInput): Promise<Game> {
@@ -52,6 +53,7 @@ export async function saveFinishedGame(input: FinishedGameInput): Promise<Game> 
     thinkTimes: input.records.map((r) => r.thinkMs ?? 0),
     goal: input.goal ?? undefined,
     timeControl: input.timeControl ?? 'unlimited',
+    hints: input.hints ?? 0,
   };
   if (input.mode === 'bot' && input.result !== '*' && input.startFen === START_FEN) {
     const score = resultScore(game);

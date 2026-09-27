@@ -76,14 +76,19 @@ La carte maison est validée contre `attackers()` de chess.js sur 30 FEN (tests/
 finale), délai de réflexion 0,5–2,5 s. Jamais de gaffe donnant mat en 1 au-dessus de 1200.
 
 **Analyse et coach (section 7).** Éval par position (profondeur 16 ordinateur / 12 mobile), conversion en
-probabilité de gain (logistique Lichess). Catégories : excellent ≤ 2 %, bon ≤ 5 %, imprécision ≤ 10 %, erreur
+probabilité de gain (logistique Lichess). Précision par coup = formule Lichess sur la perte de probabilité ; précision de
+partie = `gameAccuracy` (`winprob.ts`) : moyenne pondérée par la volatilité (écart-type sur fenêtre glissante, comme Lichess et
+la méthode CAPS de chess.com) combinée à la moyenne simple par moyenne harmonique. Elo de performance par partie
+(`progress/performance.ts` : 60 % barème de précision + 40 % résultat contre le bot, précision seule sans adversaire noté),
+stocké sur `Analysis.performanceElo`, affiché au débrief et à l'accueil. Catégories : excellent ≤ 2 %, bon ≤ 5 %, imprécision ≤ 10 %, erreur
 ≤ 20 %, gaffe > 20 %, mat raté. Motifs détectés sur la carte d'attaques : pièce en prise, capture gratuite ratée,
 fourchette subie/ratée, clouage, roi au centre après le coup 15, coup dans une case rouge, échange perdant (SEE),
 mat en 1–3 raté/encaissé, temps perdu. 3 à 5 moments clés + tournant, phrases modèles françaises par motif et
 gravité (`phrases.ts`). Coach LLM optionnel avec la clé de l'utilisateur (moments clés seulement).
 
 **Commentaires et voix.** `explain.ts` décrit chaque coup (capture, échec, roque, pièce sauvée/défendue, menace, développement)
-et explique pourquoi le coup « Mieux » est meilleur (but du coup, réplique adverse après le coup joué, suite prévue, évaluations).
+et explique pourquoi le coup « Mieux » est meilleur (but du coup, réplique adverse après le coup joué, suite prévue, évaluations) ;
+après un coup simplement « bon » du joueur, le meilleur coup est nommé et expliqué avec un ton doux (en direct comme au débrief).
 `analyzeGame` conserve la variante principale (`bestLine`) et la meilleure réplique (`threat`). `speech.ts` utilise la Web Speech API
 et préfère la voix « Vivienne » (Microsoft, fr-FR) si elle est installée. Réglages : `voiceEnabled`, `voiceName`, `voiceRate`,
 `liveComments` (off / descriptive / full), `autoReadDebrief`, `hdVoiceId`.

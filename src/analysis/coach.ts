@@ -136,6 +136,8 @@ export function selectKeyMoments(moves: MoveEval[], playerColor: 'w' | 'b', max 
   });
 }
 
+import { gameAccuracy, winProbability } from './winprob';
+
 export interface GameSummary {
   accuracy: number;
   blunders: number;
@@ -182,8 +184,12 @@ export function summarize(moves: MoveEval[], playerColor: 'w' | 'b', accuracyOf:
     : weakestPhase
       ? `Phase la plus faible : ${PHASE_LABEL[weakestPhase]}.`
       : 'Peu d\'erreurs marquantes dans cette partie.';
+  // Précision de partie pondérée par la volatilité (Lichess / CAPS), à partir des évaluations point de vue Blancs.
+  const winPercents = moves.length ? [winProbability(moves[0].evalBefore), ...moves.map((m) => winProbability(m.evalAfter))] : [];
+  const perMove = moves.map((m) => accuracyOf(m.winProbLoss));
+  const mineIdx = moves.map((m, i) => (m.color === playerColor ? i : -1)).filter((i) => i >= 0);
   return {
-    accuracy: acc(mine) ?? 0,
+    accuracy: moves.length ? gameAccuracy(winPercents, perMove, mineIdx) : 0,
     blunders: counts.blunder + counts.mate_missed,
     mistakes: counts.mistake,
     inaccuracies: counts.inaccuracy,

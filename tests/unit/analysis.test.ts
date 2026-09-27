@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { gameAccuracy } from '../../src/analysis/winprob';
 import { winProbability, moveAccuracy } from '../../src/analysis/winprob';
 import { classifyMove } from '../../src/analysis/classify';
 import { detectMotifs } from '../../src/analysis/motifs';
@@ -110,5 +111,31 @@ describe('coach', () => {
     expect(formatEval(9998)).toBe('M2');
     expect(formatEval(-9997)).toBe('-M3');
     expect(fill('Ton {piece} {square}', { piece: 'fou', square: 'c4' })).toBe('Ton fou c4');
+  });
+});
+
+describe('précision de partie (Lichess / CAPS)', () => {
+  it('vaut 100 quand tous les coups sont parfaits et baisse avec les pertes', () => {
+    const wp = [50, 50, 50, 50, 50, 50, 50];
+    const perfect = [100, 100, 100, 100, 100, 100];
+    expect(gameAccuracy(wp, perfect, [0, 2, 4])).toBeCloseTo(100, 5);
+    const mixed = [100, 100, 60, 100, 100, 100];
+    expect(gameAccuracy(wp, mixed, [0, 2, 4])).toBeLessThan(100);
+    expect(gameAccuracy(wp, mixed, [1, 3, 5])).toBeCloseTo(100, 5);
+    expect(gameAccuracy(wp, mixed, [])).toBe(0);
+  });
+  it('pèse davantage les coups joués dans les positions volatiles', () => {
+    // Position calme (50 % partout) puis position très instable : la même perte de précision coûte plus cher là où ça bouge.
+    const calm = Array(12).fill(50);
+    const volatile = [50, 50, 50, 50, 50, 50, 90, 20, 85, 15, 80, 10];
+    const acc = [100, 100, 100, 100, 100, 100, 60, 100, 100, 100, 100];
+    const inCalm = gameAccuracy(calm, acc, [0, 2, 4, 6, 8, 10]);
+    const inVolatile = gameAccuracy(volatile, acc, [0, 2, 4, 6, 8, 10]);
+    expect(inVolatile).toBeLessThan(inCalm);
+  });
+  it('précision par coup : 0 % de perte ≈ 100, 10 % ≈ 63', () => {
+    expect(moveAccuracy(0)).toBeCloseTo(100, 0);
+    expect(moveAccuracy(10)).toBeCloseTo(63.5, 0);
+    expect(winProbability(0)).toBe(50);
   });
 });

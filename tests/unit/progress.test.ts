@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { expectedScore, performanceRating, recommendBot, updateElo, updateStreak } from '../../src/progress/elo';
+import { performanceElo, performanceForGame, performanceText, ratingFromAccuracy } from '../../src/progress/performance';
 import { computeIndicators, isAlert, radarScore, INDICATORS, resultScore } from '../../src/progress/profile';
 import { generatePlan, shouldRegeneratePlan } from '../../src/progress/trainingPlan';
 import { blindfoldScore, countAttackersQuestion, knightSquaresQuestion } from '../../src/progress/exercises';
@@ -107,5 +108,27 @@ describe('exercices internes', () => {
     expect(blindfoldScore(['a1', 'b2'], ['a1', 'b2'])).toBe(100);
     expect(blindfoldScore(['a1'], ['a1', 'b2'])).toBe(50);
     expect(blindfoldScore([], ['a1'])).toBe(0);
+  });
+});
+
+describe('Elo de performance', () => {
+  it('barème de précision et mélange avec le résultat', () => {
+    expect(ratingFromAccuracy(60)).toBe(800);
+    expect(ratingFromAccuracy(80)).toBe(1600);
+    expect(ratingFromAccuracy(100)).toBe(2400);
+    const win = performanceElo({ accuracy: 80, score: 1, opponentElo: 1000 });
+    expect(win.fromResult).toBe(1400);
+    expect(win.elo).toBe(Math.round(0.6 * 1600 + 0.4 * 1400));
+    const loss = performanceElo({ accuracy: 80, score: 0, opponentElo: 1000 });
+    expect(loss.elo).toBeLessThan(win.elo);
+    const human = performanceElo({ accuracy: 80, score: 1, opponentElo: null });
+    expect(human.elo).toBe(1600);
+    expect(human.fromResult).toBeNull();
+    expect(performanceText(win)).toContain('Elo de performance estimé : ' + win.elo);
+  });
+  it('partie enregistrée : bot noté, humain sans adversaire noté', () => {
+    const base = { result: '1-0' as const, playerColor: 'blue' as const };
+    expect(performanceForGame({ ...base, botElo: 1200 }, { accuracy: 75 }).opponentElo).toBe(1200);
+    expect(performanceForGame({ ...base, botElo: 0 }, { accuracy: 75 }).opponentElo).toBeNull();
   });
 });

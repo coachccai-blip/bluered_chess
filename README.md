@@ -10,6 +10,8 @@ Application web d'échecs d'entraînement, **gratuite, open source (GPL v3), 100
 - **PWA** installable sur ordinateur et téléphone, utilisable sans connexion (moteur pré-caché).
 - Données dans IndexedDB, **sauvegarde/restauration** par fichier JSON, export PGN.
 - **Coach vocal** : chaque coup est commenté (en partie et dans le débrief) et lu à voix haute ; **voix HD française hors ligne** téléchargeable (Piper, open source, ~63 Mo) ou voix du navigateur (« Vivienne » si disponible) ; explication de chaque coup « Mieux » en mots simples ; noms des ouvertures et des variantes annoncés quand elles sont jouées.
+- **Elo de performance** : après chaque partie analysée, une estimation de l'Elo joué (précision pondérée par la tension de la position, comme Lichess et le CAPS de chess.com, combinée au résultat contre le bot).
+- **Coup « bon » expliqué** : quand ton coup est bon mais pas le meilleur, le coach nomme le meilleur coup et explique la différence.
 - **Indice en partie** : bouton « Indice » progressif (la pièce, puis le coup avec une flèche, puis l'explication claire de pourquoi ce coup est le meilleur, lue à voix haute). Le nombre d'indices est rappelé au débrief.
 - **Mode Exploration** (tu joues les deux camps : barre d'avantage, commentaire de position, meilleur coup expliqué) et **cadences** illimité, 10 min, 5 min blitz avec pendules et un Elo par cadence.
 - **Programmes par faiblesse** : chaque axe du radar ouvre un programme (diagnostic, méthode, puzzles intégrés hors ligne, tes propres positions, finales, partie avec objectif, liens Lichess).

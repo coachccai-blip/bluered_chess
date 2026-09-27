@@ -45,6 +45,19 @@ describe('explication du coup « Mieux »', () => {
     expect(c).toContain('Tu joues Roi f1');
     expect(c).toContain('mieux valait Tour prend d5');
   });
+  it('après un coup « bon », nomme le meilleur coup et explique la différence avec douceur', () => {
+    const fen = '4k3/8/8/3n4/8/8/8/3RK3 w - - 0 1';
+    const [rec] = replayRecords(fen, ['Rd4']);
+    const m = mk({ ...rec, evalBefore: 300, evalAfter: 250, bestMove: 'Rxd5', bestMoveLan: 'd1d5', winProbLoss: 3, category: 'good' });
+    const c = commentForMove(m, 'w');
+    expect(c).toContain('Bon coup.');
+    expect(c).toContain('Le meilleur coup était Tour prend d5.');
+    expect(c).toContain('Tour prend d5 prend son cavalier en d5 gratuitement');
+    expect(c.toLowerCase()).toContain('ton coup reste bon, juste un peu moins précis.');
+    expect(c).not.toContain('gâche');
+    // Pour l'adversaire, pas d'explication.
+    expect(commentForMove(m, 'b')).not.toContain('meilleur coup');
+  });
   it('ne rien expliquer quand le coup joué est le meilleur', () => {
     expect(explainBest(mk({ lan: 'e2e4', bestMoveLan: 'e2e4', bestMove: 'e4' }))).toBeNull();
   });

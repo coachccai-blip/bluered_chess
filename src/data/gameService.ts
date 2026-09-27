@@ -1,4 +1,5 @@
 // Orchestration : enregistrer une partie, mettre à jour le profil, l'Elo et le plan.
+import { performanceForGame } from '../progress/performance';
 import { db, loadProfile, saveProfile } from './db';
 import { newId, type Analysis, type Drill, type Game, type GameGoal, type GameResult, type Profile, type TimeControl, type TrainingPlan } from './models';
 import { applyResult } from '../progress/ratings';
@@ -93,6 +94,7 @@ export async function saveAnalysis(game: Game, analysis: GameAnalysis): Promise<
     createdAt: Date.now(),
     engineDepth: analysis.engineDepth,
     accuracy: analysis.summary.accuracy,
+    performanceElo: performanceForGame(game, { accuracy: analysis.summary.accuracy }).elo,
     moves: analysis.moves,
     keyMoments: analysis.keyMoments,
     summary: analysis.summary,

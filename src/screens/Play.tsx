@@ -267,8 +267,13 @@ export function Play() {
           return { cpWhite: cp, mate: l?.mate ?? null, bestLan: r.bestMove ?? l?.pv[0] ?? null, pv: l?.pv ?? [] };
         };
         const ev = buildMoveEval(rec, toPos(rec.fenBefore, before), toPos(rec.fenAfter, after), useGame.getState().records.slice(0, -1));
-        const verdict = ev.category === 'excellent' || ev.category === 'good' ? `${CATEGORY_LABEL[ev.category]} coup.` : `${CATEGORY_LABEL[ev.category]}${ev.bestMove ? `, mieux valait ${spoken(ev.bestMove)}.` : '.'}`;
         const why = explainBest(ev, true);
+        const verdict =
+          ev.category === 'excellent'
+            ? 'Excellent coup.'
+            : ev.category === 'good'
+              ? `Bon coup.${why && ev.bestMove ? ` Le meilleur coup était ${spoken(ev.bestMove)}.` : ''}`
+              : `${CATEGORY_LABEL[ev.category]}${ev.bestMove ? `, mieux valait ${spoken(ev.bestMove)}.` : '.'}`;
         const verdictText = `${verdict}${why ? ` ${why}` : ''}`;
         text = `${text} ${verdictText}`;
         setComment(text);
@@ -544,7 +549,7 @@ export function Play() {
           {g.status.over && g.savedGameId && (
             <div className="btn-row" style={{ marginTop: '.75rem' }}>
               <button type="button" className="btn btn-primary" data-testid="go-debrief" onClick={() => navigate(`debrief/${g.savedGameId}`)}>
-                Analyser la partie
+                Analyser la partie et voir mon Elo de performance
               </button>
             </div>
           )}

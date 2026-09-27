@@ -27,6 +27,7 @@ import { classifyMove, CATEGORY_LABEL as CAT } from '../analysis/classify';
 import { winProbability } from '../analysis/winprob';
 import { lineScore } from '../engine/engineClient';
 import { bestLineText, commentForMove, explainBest } from '../analysis/explain';
+import { performanceForGame } from '../progress/performance';
 import { openingAnnouncement, openingForGame, openingLabel } from '../chess/openings';
 import { prefetchSpeech, speak, stopSpeaking, type PrefetchHandle } from '../ui/speech';
 
@@ -113,7 +114,8 @@ export function Debrief({ id }: { id: string }) {
     const out: Arrow[] = [];
     const bad = ['blunder', 'mistake', 'inaccuracy', 'mate_missed'].includes(currentMove.category);
     out.push({ from: currentMove.lan.slice(0, 2) as Square, to: currentMove.lan.slice(2, 4) as Square, color: bad ? '#e74c3c' : '#2ecc71', crossed: bad });
-    if (bad && currentMove.bestMoveLan && currentMove.bestMoveLan !== currentMove.lan) {
+    const showBest = bad || (currentMove.category === 'good' && currentMove.winProbLoss >= 2);
+    if (showBest && currentMove.bestMoveLan && currentMove.bestMoveLan !== currentMove.lan) {
       out.push({ from: currentMove.bestMoveLan.slice(0, 2) as Square, to: currentMove.bestMoveLan.slice(2, 4) as Square, color: '#2ecc71' });
     }
     return out;
@@ -309,6 +311,19 @@ export function Debrief({ id }: { id: string }) {
                 <div className="stat" data-testid="accuracy">{analysis.summary.accuracy.toFixed(0)} %</div>
               </div>
             </div>
+            {(() => {
+              const perf = performanceForGame(game, analysis.summary);
+              return (
+                <div style={{ marginBottom: '.7rem', padding: '.6rem .75rem', borderRadius: 'var(--radius-sm)', background: 'var(--bg-3)', borderLeft: '3px solid var(--accent)' }} data-testid="performance-elo">
+                  <div className="muted small">Elo de performance de cette partie</div>
+                  <div className="stat" style={{ fontSize: '1.6rem' }}>≈ {perf.elo}</div>
+                  <div className="muted small">
+                    Précision {Math.round(perf.accuracy)} % ≈ {perf.fromAccuracy}
+                    {perf.fromResult !== null && perf.opponentElo ? ` · ${perf.score === 1 ? 'Victoire' : perf.score === 0 ? 'Défaite' : 'Nulle'} contre un bot ${perf.opponentElo} ≈ ${perf.fromResult}` : ' · partie sans adversaire noté : précision seule'}
+                  </div>
+                </div>
+              );
+            })()}
             <div className="stat-tiles" style={{ marginBottom: '.7rem' }}>
               <div className="stat-tile"><div className="label">Gaffes</div><div className="value" style={{ color: '#e74c3c' }}>{analysis.summary.blunders}</div></div>
               <div className="stat-tile"><div className="label">Erreurs</div><div className="value" style={{ color: '#e67e22' }}>{analysis.summary.mistakes}</div></div>

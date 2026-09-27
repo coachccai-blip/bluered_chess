@@ -188,7 +188,11 @@ export function explainBest(m: MoveEval, mine = true): string | null {
   if (mine) {
     const a = evalWords(m.evalBefore * sign);
     const b = evalWords(m.evalAfter * sign);
-    parts.push(a === b ? `Avec ${spoken(m.bestMove)}, ${a} ; ton coup gâche une partie de l'avantage.` : `Avec ${spoken(m.bestMove)}, ${a}. Après ${spoken(m.san)}, ${b}.`);
+    if (m.category === 'good' || m.category === 'excellent') {
+      parts.push(a === b ? `Avec ${spoken(m.bestMove)}, ${a}. Ton coup reste bon, juste un peu moins précis.` : `Avec ${spoken(m.bestMove)}, ${a}. Après ${spoken(m.san)}, ${b} : ton coup reste bon, juste un peu moins précis.`);
+    } else {
+      parts.push(a === b ? `Avec ${spoken(m.bestMove)}, ${a} ; ton coup gâche une partie de l'avantage.` : `Avec ${spoken(m.bestMove)}, ${a}. Après ${spoken(m.san)}, ${b}.`);
+    }
   }
   void who;
   return parts.join(' ');
@@ -210,7 +214,13 @@ export function commentForMove(m: MoveEval, playerColor: Color): string {
     const f = moveFeatures(m.fenBefore, m.lan);
     const purpose = f ? describePurpose(f, mine) : [];
     const tail = purpose.length ? ` ${cap(joinFr(purpose))}.` : '';
-    return `${head} ${mine ? (m.category === 'excellent' ? 'Excellent coup.' : 'Bon coup.') : ''}${tail}`.trim();
+    const base = `${head} ${mine ? (m.category === 'excellent' ? 'Excellent coup.' : 'Bon coup.') : ''}${tail}`.trim();
+    // Coup « bon » : on nomme quand même le meilleur coup et on explique pourquoi il était un peu plus fort.
+    if (m.category === 'good' && mine) {
+      const why = explainBest(m, true);
+      if (why && m.bestMove) return `${base} Le meilleur coup était ${spoken(m.bestMove)}. ${why}`;
+    }
+    return base;
   }
   const why = explainBest(m, mine);
   return `${head} ${cap(label)}${m.bestMove ? `, mieux valait ${spoken(m.bestMove)}.` : '.'}${why ? ` ${why}` : ''}`;

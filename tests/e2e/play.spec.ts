@@ -87,6 +87,7 @@ test('le bot 800 répond et la partie est analysable, y compris hors ligne', asy
   await page.getByTestId('go-debrief').click();
   await expect(page.getByTestId('evalbar')).toBeVisible();
   await expect(page.getByTestId('accuracy')).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByTestId('performance-elo')).toContainText('≈');
   await expect(page.getByTestId('evalbar')).toHaveAttribute('data-cp', /-?\d+/);
   await page.getByTestId('debrief-evalbar-toggle').click();
   await expect(page.getByTestId('evalbar')).toHaveCount(0);

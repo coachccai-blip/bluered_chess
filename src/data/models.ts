@@ -80,6 +80,8 @@ export interface Analysis {
   createdAt: number;
   engineDepth: number;
   accuracy: number;
+  /** Elo de performance estimé pour cette partie. */
+  performanceElo?: number;
   moves: MoveEval[];
   keyMoments: KeyMoment[];
   summary: GameSummary;

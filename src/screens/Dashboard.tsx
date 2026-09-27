@@ -29,6 +29,7 @@ export function Dashboard() {
   const current = useGame(useShallow((s) => ({ inProgress: s.records.length > 0 && !s.status.over, botElo: s.botElo, mode: s.mode, plies: s.records.length })));
   const { canInstall, installed, install } = useInstallPrompt();
   const [openWeakness, setOpenWeakness] = useState<WeaknessSummary | null>(null);
+  const [lastPerf, setLastPerf] = useState<number | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -38,6 +39,7 @@ export function Dashboard() {
       setTotalGames(await db.games.count());
       const lastAnalysis = await db.analyses.orderBy('createdAt').reverse().first();
       setLastAccuracy(lastAnalysis ? lastAnalysis.accuracy : null);
+      setLastPerf(lastAnalysis?.performanceElo ?? null);
     })();
   }, []);
 
@@ -82,6 +84,7 @@ export function Dashboard() {
             <div className="stat-tile"><div className="label">Analysées</div><div className="value">{profile.gamesAnalyzed}</div></div>
             <div className="stat-tile"><div className="label">Série</div><div className="value">{profile.streak.wins > 0 ? `${profile.streak.wins} V` : profile.streak.losses > 0 ? `${profile.streak.losses} D` : '—'}</div></div>
             <div className="stat-tile"><div className="label">Précision</div><div className="value">{lastAccuracy !== null ? `${Math.round(lastAccuracy)} %` : '—'}</div></div>
+            <div className="stat-tile" title="Elo de performance de la dernière partie analysée"><div className="label">Perf.</div><div className="value">{lastPerf !== null ? lastPerf : '—'}</div></div>
           </div>
           <div className="btn-row">
             {current.inProgress && (

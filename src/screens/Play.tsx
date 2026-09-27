@@ -26,6 +26,11 @@ import { recordDrillResult } from '../data/gameService';
 import { goalFor } from '../progress/goals';
 import { launchPuzzle } from '../progress/launchAction';
 import type { PuzzleTheme } from '../progress/puzzles';
+import { TIME_CONTROLS, TIME_CONTROL_KEYS, type TimeControl } from '../data/models';
+import { ratingFor } from '../progress/ratings';
+import { explorationComment } from '../analysis/explain';
+import { pvToSan } from '../chess/game';
+import type { Profile } from '../data/models';
 import { IconList, IconKnight } from '../ui/icons';
 import { describeLiveMove, spoken, explainBest } from '../analysis/explain';
 import { openingAnnouncement, openingForGame, openingLabel } from '../chess/openings';
@@ -34,9 +39,11 @@ import { buildMoveEval } from '../analysis/analyzeGame';
 import { CATEGORY_LABEL } from '../analysis/classify';
 
 interface PendingSetup {
-  mode: 'bot' | 'human';
+  mode: 'bot' | 'human' | 'explore';
   color: 'w' | 'b' | 'random';
   botElo: number;
+  timeControl: TimeControl;
+  startFen: string;
 }
 
 export function Play() {
@@ -45,8 +52,9 @@ export function Play() {
   const { engine, error: engineError, retry: retryEngine } = useEngine();
   const vsBot = g.mode === 'bot' || g.mode === 'exercise';
   const [setupOpen, setSetupOpen] = useState(g.records.length === 0 && g.mode === 'bot' && !g.exerciseBestMove);
-  const [setup, setSetup] = useState<PendingSetup>({ mode: 'bot', color: 'w', botElo: g.botElo });
-  const [recommended, setRecommended] = useState<number | undefined>();
+  const [setup, setSetup] = useState<PendingSetup>({ mode: 'bot', color: 'w', botElo: g.botElo, timeControl: g.timeControl ?? 'unlimited', startFen: '' });
+  const [profileState, setProfileState] = useState<Profile | null>(null);
+  const recommended = profileState ? ratingFor(profileState, setup.timeControl).recommendedBotElo : undefined;
   const [evalCp, setEvalCp] = useState<number | null>(null);
   const [evalPending, setEvalPending] = useState(false);
   const [drawMsg, setDrawMsg] = useState<string | null>(null);
@@ -68,8 +76,9 @@ export function Play() {
 
   useEffect(() => {
     void loadProfile(db).then((p) => {
-      setRecommended(p.recommendedBotElo);
-      setSetup((s) => ({ ...s, botElo: g.records.length === 0 ? p.recommendedBotElo : s.botElo }));
+      setProfileState(p);
+      // Par défaut : le bot recommandé pour la cadence choisie.
+      setSetup((s) => ({ ...s, botElo: g.records.length === 0 ? ratingFor(p, s.timeControl).recommendedBotElo : s.botElo }));
     });
     void db.plans.orderBy('generatedAt').reverse().first().then((plan) => setPlanTarget(plan?.targets[0]));
     // Bilan contre chaque bot.
@@ -108,7 +117,8 @@ export function Play() {
 
   const turn = turnOf(g.fen);
   const botColor: Color | null = vsBot ? (g.playerColor === 'w' ? 'b' : 'w') : null;
-  const movable: Color[] = g.status.over || viewPly !== null ? [] : g.mode === 'human' ? ['w', 'b'] : [g.playerColor];
+  const isExplore = g.mode === 'explore';
+  const movable: Color[] = g.status.over || viewPly !== null ? [] : g.mode === 'human' || isExplore ? ['w', 'b'] : [g.playerColor];
   const viewedFen = viewPly === null ? g.fen : viewPly === 0 ? g.startFen : g.records[viewPly - 1].fenAfter;
   const viewedLastMove = viewPly === null ? g.lastMove() : viewPly === 0 ? null : { from: g.records[viewPly - 1].from, to: g.records[viewPly - 1].to };
 
@@ -138,24 +148,40 @@ export function Play() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine, g.fen, g.mode, g.status.over, turn, botColor, g.botThinking, viewPly]);
 
-  // Barre d'évaluation optionnelle.
+  // Barre d'évaluation (et, en exploration, meilleur coup expliqué).
+  const [suggestion, setSuggestion] = useState<{ san: string; lan: string; line: string[]; text: string } | null>(null);
+  const [showBest, setShowBest] = useState(true);
   useEffect(() => {
-    if (!engine || !settings.showEvalBar || g.mode === 'exercise') {
+    const explore = g.mode === 'explore';
+    if (!engine || (!settings.showEvalBar && !explore) || g.mode === 'exercise') {
       setEvalCp(null);
+      setSuggestion(null);
       return;
     }
-    if (g.status.over && g.status.reason === 'checkmate') {
-      setEvalCp(g.status.result === '1-0' ? 10000 : -10000);
+    if (g.status.over) {
+      if (g.status.reason === 'checkmate') setEvalCp(g.status.result === '1-0' ? 10000 : -10000);
+      setSuggestion(null);
       return;
     }
     let alive = true;
     setEvalPending(true);
     engine
-      .analyze(g.fen, { depth: 10 })
+      .analyze(g.fen, { depth: explore ? 12 : 10 })
       .then((r) => {
         if (!alive) return;
         const l = r.lines[0];
-        if (l) setEvalCp(lineScore(l) * (turn === 'w' ? 1 : -1));
+        const cp = l ? lineScore(l) * (turn === 'w' ? 1 : -1) : 0;
+        if (l) setEvalCp(cp);
+        if (explore) {
+          const lan = r.bestMove ?? l?.pv[0] ?? null;
+          const line = lan ? pvToSan(g.fen, l?.pv.slice(0, 5) ?? [lan]) : [];
+          const san = line[0] ?? null;
+          const text = explorationComment(cp, san, g.fen, lan);
+          setSuggestion(lan && san ? { san, lan, line, text } : null);
+          setComment(text);
+          const st = useSettings.getState().settings;
+          if (st.voiceEnabled && st.liveComments !== 'off') void speak(text, { voiceName: st.voiceName, rate: st.voiceRate });
+        }
       })
       .catch(() => {})
       .finally(() => alive && setEvalPending(false));
@@ -164,9 +190,21 @@ export function Play() {
     };
   }, [engine, g.fen, settings.showEvalBar, g.mode, turn, g.status]);
 
+  // Pendules : décompte du camp au trait.
+  useEffect(() => {
+    if (!g.clocks || g.status.over || viewPly !== null) return;
+    let last = Date.now();
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      useGame.getState().tick(now - last);
+      last = now;
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [g.clocks !== null, g.status.over, g.records.length, viewPly]);
+
   // Fin de partie : sauvegarde unique.
   useEffect(() => {
-    if (!g.status.over || g.savedGameId || g.mode === 'exercise' || saving) return;
+    if (!g.status.over || g.savedGameId || g.mode === 'exercise' || g.mode === 'explore' || saving) return;
     if (g.records.length === 0) return;
     setSaving(true);
     if (settings.sounds) sounds.end();
@@ -181,6 +219,7 @@ export function Play() {
       startedAt: g.startedAt,
       mode: g.mode,
       goal: g.goal,
+      timeControl: g.timeControl,
     })
       .then((game) => {
         g.setSavedGameId(game.id);
@@ -194,7 +233,7 @@ export function Play() {
   const commentLastMove = useCallback(
     async (rec: MoveRecord) => {
       const st = useSettings.getState().settings;
-      if (st.liveComments === 'off') return;
+      if (st.liveComments === 'off' || useGame.getState().mode === 'explore') return;
       const job = ++commentJob.current;
       const pc = useGame.getState().playerColor;
       let text = describeLiveMove(rec, pc);
@@ -262,7 +301,7 @@ export function Play() {
       const gs = useGame.getState();
       const level = useSettings.getState().settings.blunderCheck;
       // Filet anti-gaffe : seulement pour le joueur (pas en mode exercice, où l'erreur fait partie de l'apprentissage).
-      if (level !== 'off' && gs.mode !== 'exercise' && (gs.mode === 'human' || turnOf(gs.fen) === gs.playerColor)) {
+      if (level !== 'off' && gs.mode !== 'exercise' && gs.mode !== 'explore' && (gs.mode === 'human' || turnOf(gs.fen) === gs.playerColor)) {
         const risk = assessMoveRisk(gs.fen, `${m.from}${m.to}${m.promotion ?? ''}`, level);
         if (risk) {
           setPendingMove({ move: m, risk });
@@ -274,11 +313,20 @@ export function Play() {
     [applyMoveNow],
   );
 
-  const startGame = () => {
+  const startGame = async () => {
     const color: Color = setup.color === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : setup.color;
     botJob.current++;
     const goal = setup.mode === 'bot' ? goalFor(planTarget) ?? null : null;
-    g.newGame({ mode: setup.mode, playerColor: color, botElo: setup.botElo, goal });
+    let startFen: string | undefined;
+    if (setup.mode === 'explore' && setup.startFen.trim()) {
+      try {
+        const { Chess } = await import('chess.js');
+        startFen = new Chess(setup.startFen.trim()).fen();
+      } catch {
+        setToast('Position FEN invalide : départ depuis la position initiale.');
+      }
+    }
+    g.newGame({ mode: setup.mode, playerColor: color, botElo: setup.botElo, goal, timeControl: setup.mode === 'bot' || setup.mode === 'human' ? setup.timeControl : 'unlimited', startFen });
     g.setHeatmapMode(settings.defaultHeatmapMode);
     stopSpeaking();
     setComment(goal ? `Objectif de cette partie : ${goal.label.toLowerCase()}.` : null);
@@ -312,7 +360,7 @@ export function Play() {
     } else setDrawMsg('Le bot refuse la nulle : il pense avoir l\'avantage.');
   };
 
-  const arrows: Arrow[] = useMemo(() => [], []);
+  const arrows: Arrow[] = useMemo(() => (isExplore && showBest && suggestion && viewPly === null ? [{ from: suggestion.lan.slice(0, 2) as Square, to: suggestion.lan.slice(2, 4) as Square, color: '#2ecc71' }] : []), [isExplore, showBest, suggestion, viewPly]);
   const attackOptions = useMemo(() => ({ ignorePinned: settings.ignorePinned, xray: settings.xray }), [settings.ignorePinned, settings.xray]);
   const playerLabel = colorLabel(g.playerColor, palette);
   const opening = useMemo(() => (g.startFen === START_FEN ? openingForGame(g.records.map((r) => r.san)) : null), [g.records, g.startFen]);
@@ -324,7 +372,7 @@ export function Play() {
       return `Trait au ${colorLabel(turn, palette)}`;
     }
     const s = g.status;
-    const reason: Record<string, string> = { checkmate: 'Échec et mat', stalemate: 'Pat', repetition: 'Nulle par répétition', 'fifty-moves': 'Nulle (50 coups)', insufficient: 'Matériel insuffisant', resign: 'Abandon', 'draw-agreed': 'Nulle acceptée' };
+    const reason: Record<string, string> = { checkmate: 'Échec et mat', stalemate: 'Pat', repetition: 'Nulle par répétition', 'fifty-moves': 'Nulle (50 coups)', insufficient: 'Matériel insuffisant', resign: 'Abandon', 'draw-agreed': 'Nulle acceptée', timeout: 'Temps écoulé' };
     const who = s.result === '1-0' ? `${colorLabel('w', palette)} gagne` : s.result === '0-1' ? `${colorLabel('b', palette)} gagne` : 'Partie nulle';
     return `${reason[s.reason]} · ${who}`;
   })();
@@ -332,7 +380,7 @@ export function Play() {
   return (
     <div className="play-layout">
       <div>
-        <PlayerBar color={g.flipped ? g.playerColor : (botColor ?? 'b')} name={g.flipped ? (vsBot ? `Moi (${playerLabel})` : colorLabel('w', palette)) : vsBot ? `${botProfile.name} (${g.botElo})` : colorLabel('b', palette)} palette={palette} active={turn === (g.flipped ? g.playerColor : (botColor ?? 'b')) && !g.status.over} thinking={!g.flipped && g.botThinking} fen={viewedFen} />
+        <PlayerBar color={g.flipped ? g.playerColor : (botColor ?? 'b')} name={g.flipped ? (vsBot ? `Moi (${playerLabel})` : colorLabel('w', palette)) : vsBot ? `${botProfile.name} (${g.botElo})` : `${colorLabel('b', palette)}${isExplore ? ' (moi)' : ''}`} palette={palette} active={turn === (g.flipped ? g.playerColor : (botColor ?? 'b')) && !g.status.over} thinking={!g.flipped && g.botThinking} fen={viewedFen} clockMs={g.clocks ? g.clocks[g.flipped ? g.playerColor : (botColor ?? 'b')] : null} />
         <div className="board-row">
           {settings.showEvalBar && g.mode !== 'exercise' && <EvalBarVertical cp={evalCp} flipped={g.flipped} palette={palette} pending={evalPending} />}
           <Board
@@ -355,7 +403,7 @@ export function Play() {
             onDrawModeChange={setDrawMode}
           />
         </div>
-        <PlayerBar color={g.flipped ? (botColor ?? 'b') : g.playerColor} name={g.flipped ? (vsBot ? `${botProfile.name} (${g.botElo})` : colorLabel('b', palette)) : vsBot ? `Moi (${playerLabel})` : colorLabel('w', palette)} palette={palette} active={turn === (g.flipped ? (botColor ?? 'b') : g.playerColor) && !g.status.over} thinking={g.flipped && g.botThinking} fen={viewedFen} />
+        <PlayerBar color={g.flipped ? (botColor ?? 'b') : g.playerColor} name={g.flipped ? (vsBot ? `${botProfile.name} (${g.botElo})` : colorLabel('b', palette)) : vsBot ? `Moi (${playerLabel})` : `${colorLabel('w', palette)}${isExplore ? ' (moi)' : ''}`} palette={palette} active={turn === (g.flipped ? (botColor ?? 'b') : g.playerColor) && !g.status.over} thinking={g.flipped && g.botThinking} fen={viewedFen} clockMs={g.clocks ? g.clocks[g.flipped ? (botColor ?? 'b') : g.playerColor] : null} />
         {g.records.length > 0 && (
           <div className="review-bar" data-testid="review-bar">
             <button type="button" className="btn btn-sm" onClick={() => setViewPly(0)} title="Début">⏮</button>
@@ -401,7 +449,7 @@ export function Play() {
             <button type="button" className="btn btn-sm" onClick={() => g.setFlipped(!g.flipped)} title="Retourner l'échiquier">
               Retourner
             </button>
-            {g.mode !== 'exercise' && (
+            {g.mode !== 'exercise' && !isExplore && (
               <button
                 type="button"
                 className={`btn btn-sm ${settings.blunderCheck !== 'off' ? '' : 'btn-ghost'}`}
@@ -423,7 +471,7 @@ export function Play() {
                 Annuler
               </button>
             )}
-            {!g.status.over && g.records.length > 0 && g.mode !== 'exercise' && (
+            {!g.status.over && g.records.length > 0 && g.mode !== 'exercise' && !isExplore && (
               <>
                 <button type="button" className="btn btn-sm" onClick={() => void offerDraw()}>
                   Proposer nulle
@@ -470,7 +518,7 @@ export function Play() {
             </div>
           )}
         </div>
-        {settings.liveComments !== 'off' && (
+        {(settings.liveComments !== 'off' || isExplore) && (
           <div className="card" data-testid="live-comment">
             <div className="card-title">
               <IconKnight className="ico" />
@@ -488,6 +536,17 @@ export function Play() {
             )}
             <p className="small" style={{ margin: 0 }}>{comment ?? 'Je commente chaque coup ici. Active la voix dans les réglages pour m\'entendre.'}</p>
             {avoided > 0 && <p className="muted small" style={{ margin: '.3rem 0 0' }}>Gaffes évitées grâce au filet : {avoided}</p>}
+            {isExplore && (
+              <div className="btn-row" style={{ marginTop: '.5rem' }} data-testid="explore-tools">
+                <button type="button" className="btn btn-sm btn-primary" data-testid="play-best" disabled={!suggestion || g.status.over} onClick={() => suggestion && applyMoveNow({ from: suggestion.lan.slice(0, 2) as Square, to: suggestion.lan.slice(2, 4) as Square, promotion: (suggestion.lan[4] as 'q') || undefined })}>
+                  Jouer le meilleur coup{suggestion ? ` (${suggestion.san})` : ''}
+                </button>
+                <button type="button" className={`btn btn-sm ${showBest ? '' : 'btn-ghost'}`} onClick={() => setShowBest((v) => !v)}>
+                  {showBest ? 'Cacher la flèche' : 'Montrer la flèche'}
+                </button>
+                {suggestion && suggestion.line.length > 1 && <span className="muted small">Suite : {suggestion.line.join(' ')}</span>}
+              </div>
+            )}
             {settings.voiceEnabled && speechStatus.state === 'preparing' && <p className="muted small" style={{ margin: '.3rem 0 0' }}>Préparation de la voix HD…</p>}
             {settings.voiceEnabled && speechStatus.state === 'speaking' && <p className="muted small" style={{ margin: '.3rem 0 0' }}>🔊 lecture ({speechStatus.engine === 'hd' ? 'voix HD' : 'voix du navigateur'})</p>}
             {settings.voiceEnabled && speechStatus.state === 'error' && (
@@ -571,7 +630,46 @@ export function Play() {
               <button type="button" className={`tab ${setup.mode === 'human' ? 'active' : ''}`} data-testid="mode-human" onClick={() => setSetup({ ...setup, mode: 'human' })}>
                 Deux joueurs
               </button>
+              <button type="button" className={`tab ${setup.mode === 'explore' ? 'active' : ''}`} data-testid="mode-explore" onClick={() => setSetup({ ...setup, mode: 'explore' })}>
+                Exploration
+              </button>
             </div>
+            {setup.mode !== 'explore' && (
+              <div>
+                <div className="muted small">Cadence {setup.mode === 'bot' && '(chaque cadence a son propre Elo)'}</div>
+                <div className="segmented" role="radiogroup" aria-label="Cadence">
+                  {TIME_CONTROL_KEYS.map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      role="radio"
+                      aria-checked={setup.timeControl === k}
+                      className={setup.timeControl === k ? 'active' : ''}
+                      data-testid={`tc-${k}`}
+                      onClick={() => setSetup({ ...setup, timeControl: k, botElo: profileState ? ratingFor(profileState, k).recommendedBotElo : setup.botElo })}
+                    >
+                      {TIME_CONTROLS[k].label}
+                    </button>
+                  ))}
+                </div>
+                {profileState && setup.mode === 'bot' && (
+                  <p className="muted small" style={{ margin: '.3rem 0 0' }}>
+                    Ton Elo {TIME_CONTROLS[setup.timeControl].label.toLowerCase()} : <strong>{ratingFor(profileState, setup.timeControl).elo}</strong> · bot recommandé : {ratingFor(profileState, setup.timeControl).recommendedBotElo}
+                  </p>
+                )}
+              </div>
+            )}
+            {setup.mode === 'explore' && (
+              <div className="stack" style={{ gap: '.4rem' }}>
+                <p className="small" style={{ margin: 0 }}>
+                  Tu joues les deux camps, sans pendule ni classement. À chaque coup : barre d'avantage, commentaire de la position et meilleur coup expliqué (flèche verte). Idéal pour tester une idée ou une position.
+                </p>
+                <label className="small">
+                  Position de départ (FEN, facultatif)
+                  <input type="text" value={setup.startFen} placeholder="Laisser vide pour la position initiale" style={{ width: '100%', marginTop: '.25rem' }} data-testid="explore-fen" onChange={(e) => setSetup({ ...setup, startFen: e.target.value })} />
+                </label>
+              </div>
+            )}
             {setup.mode === 'bot' && (
               <>
                 <BotSelector elo={setup.botElo} recommended={recommended} record={botRecords[setup.botElo]} onChange={(e) => setSetup({ ...setup, botElo: e })} />
@@ -604,11 +702,22 @@ export function Play() {
   );
 }
 
-function PlayerBar({ color, name, palette, active, thinking, fen }: { color: Color; name: string; palette: ReturnType<typeof useSettings.getState>['palette']; active: boolean; thinking?: boolean; fen: string }) {
+function formatClock(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function PlayerBar({ color, name, palette, active, thinking, fen, clockMs }: { color: Color; name: string; palette: ReturnType<typeof useSettings.getState>['palette']; active: boolean; thinking?: boolean; fen: string; clockMs?: number | null }) {
   return (
     <div className={`player-bar ${active ? 'active' : ''}`} style={{ ['--ring' as string]: palette[color].ring }}>
       <span className="side">
         <span className="dot" style={{ background: palette[color].piece }} /> {name}
+        {clockMs !== null && clockMs !== undefined && (
+          <span className={`clock ${clockMs < 30_000 ? 'low' : ''} ${active ? 'running' : ''}`} data-testid={`clock-${color}`}>
+            {formatClock(clockMs)}
+          </span>
+        )}
       </span>
       <span className="row" style={{ gap: '.5rem' }}>
         <Material fen={fen} color={color} fill={palette[color === 'w' ? 'b' : 'w'].piece} />

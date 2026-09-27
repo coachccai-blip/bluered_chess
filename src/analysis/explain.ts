@@ -250,3 +250,31 @@ export function describeLiveMove(rec: MoveRecord, playerColor: Color): string {
   }
   return parts.join(' ');
 }
+
+/** Évaluation en mots, point de vue neutre Bleu/Rouge (mode exploration). */
+export function positionWords(cpWhite: number): string {
+  if (cpWhite >= 9000) return 'Le Bleu va mater';
+  if (cpWhite <= -9000) return 'Le Rouge va mater';
+  if (cpWhite >= 300) return 'Le Bleu est en train de gagner';
+  if (cpWhite >= 100) return 'Le Bleu est mieux';
+  if (cpWhite > -100) return 'La position est équilibrée';
+  if (cpWhite > -300) return 'Le Rouge est mieux';
+  return 'Le Rouge est en train de gagner';
+}
+
+/** Rend un texte neutre (sans « ton/ta » ni « son/sa ») pour le mode exploration. */
+export function neutral(text: string): string {
+  return text.replace(/\b(ton|son) /g, 'le ').replace(/\b(ta|sa) /g, 'la ').replace(/\bmet le roi/g, 'met le roi');
+}
+
+/** Commentaire d'une position pour l'exploration : bilan + meilleur coup expliqué. */
+export function explorationComment(cpWhite: number, bestSan: string | null, fen: string, bestLan: string | null): string {
+  const turn = fen.split(' ')[1] === 'w' ? 'Bleu' : 'Rouge';
+  const parts = [`Trait au ${turn}. ${positionWords(cpWhite)}.`];
+  if (bestSan && bestLan) {
+    const f = moveFeatures(fen, bestLan);
+    const purpose = f ? describePurpose(f, true).map(neutral) : [];
+    parts.push(`Meilleur coup : ${spoken(bestSan)}${purpose.length ? ` : ${purpose.join(', ')}` : ''}.`);
+  }
+  return parts.join(' ');
+}

@@ -207,6 +207,11 @@ export function Debrief({ id }: { id: string }) {
     setReading(false);
   };
 
+  const exploreFromHere = (fen: string) => {
+    useGame.getState().newGame({ mode: 'explore', playerColor: playerColor, startFen: fen });
+    navigate('partie');
+  };
+
   const replayFromHere = (m: KeyMoment | MoveEval) => {
     const g = useGame.getState();
     g.newGame({ mode: 'bot', playerColor, botElo: game?.botElo || 1200, startFen: m.fenBefore });
@@ -416,6 +421,9 @@ export function Debrief({ id }: { id: string }) {
                   {formatEval(currentMove.evalBefore)} → {formatEval(currentMove.evalAfter)}
                 </span>
                 {currentMove.bestMove && currentMove.bestMove !== currentMove.san && <span className="small">Mieux : {currentMove.bestMove}</span>}
+                <button type="button" className="btn btn-sm btn-ghost" data-testid="explore-here" onClick={() => exploreFromHere(currentMove.fenBefore)}>
+                  Explorer d'ici
+                </button>
                 {game.thinkTimes?.[currentMove.ply - 1] !== undefined && currentMove.color === playerColor && (
                   <span className="muted small" title="Temps de réflexion">{game.thinkTimes[currentMove.ply - 1] < 3000 ? '⚡ ' : '⏱ '}{(game.thinkTimes[currentMove.ply - 1] / 1000).toFixed(0)} s</span>
                 )}

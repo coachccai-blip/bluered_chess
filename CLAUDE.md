@@ -26,6 +26,13 @@ node scripts/make-icons.mjs  # régénère les PNG d'icônes depuis public/icons
 - Les pièces de l'échiquier ont des identités stables (`nextPieceIds` dans `Board.tsx`) pour animer le glissement ;
   la transformation est en CSS, pas en attribut SVG.
 - Le mode `exercise` du store se joue contre le bot comme le mode `bot`, avec retour sur le meilleur coup attendu.
+- Mode `explore` : le joueur joue les deux camps, rien n'est enregistré ; après chaque coup, évaluation à profondeur 12,
+  commentaire de position neutre (`explorationComment`), meilleur coup avec flèche verte et bouton « Jouer le meilleur coup »,
+  position de départ FEN facultative ; « Explorer d'ici » depuis le débrief.
+- Cadences (`TimeControl` : unlimited par défaut, rapid 10 min, blitz 5 min) : pendules dans le store (`clocks`, `tick`),
+  perte au temps (`reason: 'timeout'`), un classement par cadence (`Profile.ratings`, `progress/ratings.ts`) ; les champs
+  `estimatedElo`/`eloHistory`/`streak`/`recommendedBotElo` reflètent la cadence illimitée. La fenêtre « Nouvelle partie »
+  propose par défaut le bot recommandé de la cadence choisie.
 - Annotations façon chess.com dans `Board.tsx` : clic droit = marquer, clic droit glissé = flèche (Maj/Alt/Ctrl changent la
   couleur), appui long sur mobile, bouton crayon pour dessiner au clic gauche ; clic gauche ou Échap efface.
 - Barre d'avantage verticale (`EvalBarVertical`) à gauche de l'échiquier, réglage `showEvalBar` (vrai par défaut), bouton

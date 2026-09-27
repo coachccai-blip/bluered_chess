@@ -8,6 +8,7 @@ import { loadProfile } from '../data/db';
 import { EloCurve } from '../ui/EloCurve';
 import { Modal } from '../ui/Modal';
 import { openingForGame, openingLabel } from '../chess/openings';
+import { TIME_CONTROLS } from '../data/models';
 
 export function History() {
   const [games, setGames] = useState<Game[]>([]);
@@ -114,7 +115,7 @@ export function History() {
               <span className={`result ${s === 1 ? 'result-win' : s === 0 ? 'result-loss' : 'result-draw'}`}>{s === 1 ? 'V' : s === 0 ? 'D' : 'N'}</span>
               <div>
                 <div>
-                  <strong>{g.playerColor === 'blue' ? 'Bleu' : 'Rouge'}</strong> {g.botElo ? `contre Bot ${g.botElo}` : g.imported ? '(importée)' : '(deux joueurs)'} · {g.sans.length} demi-coups · {g.result}
+                  <strong>{g.playerColor === 'blue' ? 'Bleu' : 'Rouge'}</strong> {g.botElo ? `contre Bot ${g.botElo}` : g.imported ? '(importée)' : '(deux joueurs)'} · {g.sans.length} demi-coups · {g.result}{g.timeControl && g.timeControl !== 'unlimited' ? <span className="tag" style={{ marginLeft: '.4rem' }}>{TIME_CONTROLS[g.timeControl].short}</span> : null}
                 </div>
                 <div className="muted small">
                   {(() => {

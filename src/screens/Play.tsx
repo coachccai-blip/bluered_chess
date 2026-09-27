@@ -29,6 +29,7 @@ import type { PuzzleTheme } from '../progress/puzzles';
 import { TIME_CONTROLS, TIME_CONTROL_KEYS, type TimeControl } from '../data/models';
 import { ratingFor } from '../progress/ratings';
 import { explorationComment } from '../analysis/explain';
+import { buildHint, nullMoveFen, type Hint } from '../analysis/hint';
 import { pvToSan } from '../chess/game';
 import type { Profile } from '../data/models';
 import { IconList, IconKnight } from '../ui/icons';
@@ -100,6 +101,7 @@ export function Play() {
   // Retour au direct dès qu'un coup est joué ; flèches ← → pour consulter les positions précédentes.
   useEffect(() => {
     setViewPly(null);
+    setHint(null);
   }, [g.records.length]);
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
@@ -150,6 +152,8 @@ export function Play() {
 
   // Barre d'évaluation (et, en exploration, meilleur coup expliqué).
   const [suggestion, setSuggestion] = useState<{ san: string; lan: string; line: string[]; text: string } | null>(null);
+  /** Indice progressif : niveau 0 = aucun, 1 = pièce, 2 = coup, 3 = explication. */
+  const [hint, setHint] = useState<{ level: number; data: Hint | null; fen: string; loading: boolean } | null>(null);
   const [showBest, setShowBest] = useState(true);
   useEffect(() => {
     const explore = g.mode === 'explore';
@@ -220,6 +224,7 @@ export function Play() {
       mode: g.mode,
       goal: g.goal,
       timeControl: g.timeControl,
+      hints: g.hintsUsed,
     })
       .then((game) => {
         g.setSavedGameId(game.id);
@@ -276,6 +281,33 @@ export function Play() {
     },
     [engine],
   );
+
+  const askHint = async () => {
+    if (!engine) return;
+    const fen = g.fen;
+    // Même position : on monte d'un niveau.
+    if (hint && hint.fen === fen && hint.data) {
+      const level = Math.min(3, hint.level + 1);
+      setHint({ ...hint, level });
+      if (level === 3 && settings.voiceEnabled) void speak(hint.data.explanation, { voiceName: settings.voiceName, rate: settings.voiceRate });
+      return;
+    }
+    setHint({ level: 1, data: null, fen, loading: true });
+    g.addHint();
+    try {
+      const nf = nullMoveFen(fen);
+      const [main, threat] = await Promise.all([
+        engine.analyze(fen, { depth: 12, multiPv: 3 }),
+        nf ? engine.analyze(nf, { depth: 8, multiPv: 1 }).catch(() => null) : Promise.resolve(null),
+      ]);
+      if (useGame.getState().fen !== fen) return;
+      const data = buildHint(fen, main.lines, threat?.lines ?? null, true);
+      setHint({ level: 1, data, fen, loading: false });
+      if (data && settings.voiceEnabled) void speak(`Indice : regarde ${data.pieceName === 'dame' || data.pieceName === 'tour' ? 'ta' : 'ton'} ${data.pieceName} en ${data.pieceSquare}.`, { voiceName: settings.voiceName, rate: settings.voiceRate });
+    } catch {
+      setHint(null);
+    }
+  };
 
   const applyMoveNow = useCallback(
     (m: { from: Square; to: Square; promotion?: 'q' | 'r' | 'b' | 'n' }) => {
@@ -360,7 +392,13 @@ export function Play() {
     } else setDrawMsg('Le bot refuse la nulle : il pense avoir l\'avantage.');
   };
 
-  const arrows: Arrow[] = useMemo(() => (isExplore && showBest && suggestion && viewPly === null ? [{ from: suggestion.lan.slice(0, 2) as Square, to: suggestion.lan.slice(2, 4) as Square, color: '#2ecc71' }] : []), [isExplore, showBest, suggestion, viewPly]);
+  const arrows: Arrow[] = useMemo(() => {
+    const out: Arrow[] = [];
+    if (isExplore && showBest && suggestion && viewPly === null) out.push({ from: suggestion.lan.slice(0, 2) as Square, to: suggestion.lan.slice(2, 4) as Square, color: '#2ecc71' });
+    if (hint && hint.data && hint.level >= 2 && hint.fen === g.fen && viewPly === null) out.push({ from: hint.data.bestLan.slice(0, 2) as Square, to: hint.data.bestLan.slice(2, 4) as Square, color: '#f5c542' });
+    return out;
+  }, [isExplore, showBest, suggestion, viewPly, hint, g.fen]);
+  const hintMarked: Square[] | undefined = hint && hint.data && hint.level >= 1 && hint.fen === g.fen && viewPly === null ? [hint.data.pieceSquare] : undefined;
   const attackOptions = useMemo(() => ({ ignorePinned: settings.ignorePinned, xray: settings.xray }), [settings.ignorePinned, settings.xray]);
   const playerLabel = colorLabel(g.playerColor, palette);
   const opening = useMemo(() => (g.startFen === START_FEN ? openingForGame(g.records.map((r) => r.san)) : null), [g.records, g.startFen]);
@@ -401,6 +439,7 @@ export function Play() {
             animations={settings.animations}
             drawMode={drawMode}
             onDrawModeChange={setDrawMode}
+            marked={hintMarked}
           />
         </div>
         <PlayerBar color={g.flipped ? (botColor ?? 'b') : g.playerColor} name={g.flipped ? (vsBot ? `${botProfile.name} (${g.botElo})` : colorLabel('b', palette)) : vsBot ? `Moi (${playerLabel})` : `${colorLabel('w', palette)}${isExplore ? ' (moi)' : ''}`} palette={palette} active={turn === (g.flipped ? (botColor ?? 'b') : g.playerColor) && !g.status.over} thinking={g.flipped && g.botThinking} fen={viewedFen} clockMs={g.clocks ? g.clocks[g.flipped ? (botColor ?? 'b') : g.playerColor] : null} />
@@ -442,6 +481,26 @@ export function Play() {
             </p>
           )}
           {drawMsg && <p className="muted small">{drawMsg}</p>}
+          {!isExplore && !g.status.over && viewPly === null && (turn === g.playerColor || g.mode === 'human') && (
+            <div style={{ marginTop: '.5rem' }} data-testid="hint-box">
+              <button type="button" className="btn btn-sm" data-testid="hint" disabled={!engine || (hint?.loading ?? false) || (hint?.level ?? 0) >= 3} onClick={() => void askHint()} title="Indice progressif : la pièce, puis le coup, puis l'explication">
+                💡 {hint?.loading ? 'Le coach réfléchit…' : !hint || hint.fen !== g.fen ? 'Indice' : hint.level === 1 ? 'Indice : montrer le coup' : hint.level === 2 ? 'Indice : pourquoi ?' : 'Indice complet'}
+              </button>
+              {hint && hint.data && hint.fen === g.fen && (
+                <div className="small" style={{ marginTop: '.4rem' }} data-testid="hint-text">
+                  {hint.level >= 1 && <p style={{ margin: 0 }}><span className="tag tag-accent">Indice 1</span> Regarde {hint.data.pieceName === 'dame' || hint.data.pieceName === 'tour' ? 'ta' : 'ton'} {hint.data.pieceName} en <strong>{hint.data.pieceSquare}</strong>.</p>}
+                  {hint.level >= 2 && <p style={{ margin: '.3rem 0 0' }}><span className="tag tag-accent">Indice 2</span> Le meilleur coup est <strong>{hint.data.bestSan}</strong> (flèche jaune).</p>}
+                  {hint.level >= 3 && (
+                    <div style={{ marginTop: '.4rem', padding: '.6rem .75rem', borderRadius: 'var(--radius-sm)', background: 'var(--bg-3)', borderLeft: '3px solid var(--accent)' }}>
+                      <strong>Pourquoi {hint.data.bestSan} est le meilleur :</strong> {hint.data.explanation}
+                      {hint.data.line.length > 1 && <div className="muted" style={{ marginTop: '.3rem' }}>Suite possible : {hint.data.line.join(' ')}</div>}
+                    </div>
+                  )}
+                </div>
+              )}
+              {hint && !hint.loading && !hint.data && hint.fen === g.fen && <p className="muted small" style={{ margin: '.3rem 0 0' }}>Pas d'indice disponible ici.</p>}
+            </div>
+          )}
           <div className="btn-row" style={{ marginTop: '.5rem' }}>
             <button type="button" className="btn btn-primary" data-testid="new-game" onClick={() => setSetupOpen(true)}>
               Nouvelle partie

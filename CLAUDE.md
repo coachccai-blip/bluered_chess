@@ -107,6 +107,12 @@ objectif de partie tiré du plan (`goalFor`, `evaluateGoal`) stocké sur la part
 erreurs jouées en moins de 3 s (temps par coup `thinkMs` dans les enregistrements, `thinkTimes` sur la partie). Débrief : mode
 « Devine le coup » (échiquier jouable aux positions du joueur, proposition notée par le moteur).
 
+**Indice en partie.** `analysis/hint.ts` (`buildHint`, `nullMoveFen`) : bouton « Indice » dans la partie (modes bot/humain/exercice, au trait du
+joueur) avec trois niveaux progressifs — la pièce à jouer (case marquée), le coup (flèche jaune), puis l'explication complète (but du coup,
+menace adverse parée grâce au coup nul, pourquoi les autres candidats MultiPV sont moins bons, évaluation en mots) affichée et lue par la voix.
+Moteur : profondeur 12 MultiPV 3 + profondeur 8 sur la position « coup nul ». Le nombre d'indices (`hintsUsed` du store, `Game.hints`) est
+affiché dans le débrief.
+
 **Programmes par faiblesse.** `progress/weaknessGuide.ts` : pour chaque indicateur du radar, un programme (diagnostic chiffré, méthode
 en partie, actions, routine) ; `rankWeaknesses` trie les faiblesses. `progress/launchAction.ts` lance une action (fiches de répétition
 filtrées par motif, puzzles intégrés de `puzzles.ts` dont les solutions sont vérifiées par les tests, exercices de visualisation via

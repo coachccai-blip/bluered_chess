@@ -338,3 +338,24 @@ test('cadence blitz : pendules, bot recommandé par cadence et perte au temps', 
   await expect(page.getByTestId('status')).toContainText('Temps écoulé', { timeout: 10_000 });
   await expect(page.getByTestId('status')).toContainText('Bleu gagne');
 });
+
+test('indice progressif : pièce, coup avec flèche, puis explication', async ({ page }) => {
+  await skipOnboarding(page);
+  await page.goto('#/partie');
+  await page.getByTestId('mode-human').click();
+  await page.getByTestId('start-game').click();
+  // Position où le cavalier d5 doit fuir le pion e6 (position de départ FEN via exploration ? non : on la joue à deux).
+  for (const [f, t] of [['e2', 'e4'], ['e7', 'e6'], ['g1', 'f3'], ['d7', 'd5'], ['f3', 'e5'], ['d5', 'e4']]) await move(page, f, t);
+  await page.getByTestId('hint').click();
+  await expect(page.getByTestId('hint-text')).toContainText('Regarde', { timeout: 40_000 });
+  await page.getByTestId('hint').click();
+  await expect(page.getByTestId('hint-text')).toContainText('Le meilleur coup est');
+  await expect(page.locator('[data-testid="board"] line')).toHaveCount(1);
+  await page.getByTestId('hint').click();
+  await expect(page.getByTestId('hint-text')).toContainText('est le meilleur');
+  // Après un coup, l'indice disparaît.
+  const best = await page.getByTestId('hint-text').locator('strong').nth(1).textContent();
+  expect(best).toBeTruthy();
+  await move(page, 'e5', 'c4');
+  await expect(page.getByTestId('hint-text')).toHaveCount(0);
+});

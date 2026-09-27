@@ -2,6 +2,7 @@
 import Dexie, { type Table } from 'dexie';
 import type { Analysis, Drill, Game, Profile, Settings, TrainingPlan } from './models';
 import { DEFAULT_PROFILE, DEFAULT_SETTINGS } from './models';
+import { ensureRatings } from '../progress/ratings';
 
 export class BlueRedDB extends Dexie {
   games!: Table<Game, string>;
@@ -54,7 +55,7 @@ export async function saveSettings(s: Settings, database: BlueRedDB = db): Promi
 
 export async function loadProfile(database: BlueRedDB = db): Promise<Profile> {
   const p = await database.profile.get('me');
-  return { ...DEFAULT_PROFILE, ...(p ?? {}) };
+  return ensureRatings({ ...DEFAULT_PROFILE, ...(p ?? {}) });
 }
 
 export async function saveProfile(p: Profile, database: BlueRedDB = db): Promise<void> {

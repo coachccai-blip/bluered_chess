@@ -146,6 +146,9 @@ ul { margin: .25rem 0 .75rem; padding-left: 1.2rem; }
 .player-bar.active { box-shadow: 0 0 0 2px var(--ring, var(--blue-2)); }
 .player-bar .side { display: inline-flex; align-items: center; gap: .5rem; font-weight: 700; }
 .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.2); }
+.clock { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 700; padding: .1rem .45rem; border-radius: 6px; background: var(--bg-3); border: 1px solid var(--border-2); margin-left: .4rem; }
+.clock.running { border-color: var(--accent); }
+.clock.low { color: var(--red-2); border-color: var(--red-2); animation: pulse 1s ease-in-out infinite; }
 .thinking { color: var(--accent); font-size: .85rem; display: inline-flex; align-items: center; gap: .4rem; }
 .material { display: inline-flex; align-items: center; gap: .1rem; font-size: .85rem; color: var(--muted); }
 .material svg { width: 18px; height: 18px; }

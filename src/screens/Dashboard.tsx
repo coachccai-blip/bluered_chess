@@ -16,6 +16,8 @@ import { Ring } from '../ui/Ring';
 import { IconBoardEmpty, IconPlan, IconRadar, IconTrophy } from '../ui/icons';
 import { WeaknessPanel } from '../ui/WeaknessPanel';
 import { rankWeaknesses, type WeaknessSummary } from '../progress/weaknessGuide';
+import { TIME_CONTROLS, TIME_CONTROL_KEYS } from '../data/models';
+import { ratingFor, withStartingLevel } from '../progress/ratings';
 
 export function Dashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -66,6 +68,15 @@ export function Dashboard() {
             </div>
             <Ring value={lastAccuracy ?? 0} label="Précision de la dernière partie" color="var(--green)" />
           </div>
+          <div className="stat-tiles" style={{ marginBottom: '.6rem' }} data-testid="elo-by-tc">
+            {TIME_CONTROL_KEYS.map((k) => (
+              <div key={k} className="stat-tile">
+                <div className="label">Elo {TIME_CONTROLS[k].short}</div>
+                <div className="value">{ratingFor(profile, k).elo}</div>
+                <div className="muted small">{ratingFor(profile, k).history.length} partie{ratingFor(profile, k).history.length > 1 ? 's' : ''}</div>
+              </div>
+            ))}
+          </div>
           <div className="stat-tiles" style={{ marginBottom: '.8rem' }}>
             <div className="stat-tile"><div className="label">Parties</div><div className="value">{totalGames}</div></div>
             <div className="stat-tile"><div className="label">Analysées</div><div className="value">{profile.gamesAnalyzed}</div></div>
@@ -84,6 +95,9 @@ export function Dashboard() {
             <a className="btn" href="#/partie">
               Choisir un bot
             </a>
+            <button type="button" className="btn btn-ghost" data-testid="explore-start" onClick={() => { useGame.getState().newGame({ mode: 'explore', playerColor: 'w' }); navigate('partie'); }}>
+              Explorer une position
+            </button>
           </div>
           {canInstall && !installed && (
             <p className="small" style={{ marginTop: '.5rem' }}>
@@ -225,7 +239,7 @@ function Onboarding({ profile, onDone, onLevel }: { profile: Profile; onDone: (p
   const [step, setStep] = useState(0);
   const { palette } = useSettings();
   const finish = async (elo: number) => {
-    const p: Profile = { ...profile, onboardingDone: true, estimatedElo: elo, recommendedBotElo: elo, updatedAt: Date.now() };
+    const p: Profile = withStartingLevel({ ...profile, onboardingDone: true, updatedAt: Date.now() }, elo);
     await saveProfile(p, db);
     onLevel(elo);
     onDone(p);

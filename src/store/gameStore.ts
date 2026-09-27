@@ -3,8 +3,9 @@ import { create } from 'zustand';
 import { applyMove, gameStatusWithHistory, START_FEN, type GameStatus, type MoveInput, type MoveRecord } from '../chess/game';
 import type { Color, Square } from '../chess/types';
 import type { HeatmapMode } from '../board/ThreatOverlay';
+import { TIME_CONTROLS, type TimeControl } from '../data/models';
 
-export type GameMode = 'bot' | 'human' | 'exercise';
+export type GameMode = 'bot' | 'human' | 'exercise' | 'explore';
 
 export interface GameState {
   startFen: string;
@@ -29,7 +30,12 @@ export interface GameState {
   /** Objectif de la partie. */
   goal: { key: string; label: string } | null;
   lastMoveAt: number;
-  newGame: (opts: { mode: GameMode; playerColor?: Color; botElo?: number; startFen?: string; exerciseBestMove?: string | null; exerciseDrillId?: string | null; goal?: { key: string; label: string } | null; exerciseTheme?: string | null; exerciseHint?: string | null }) => void;
+  /** Cadence et temps restant (ms) par camp ; null = illimité. */
+  timeControl: TimeControl;
+  clocks: { w: number; b: number } | null;
+  /** Décompte le temps du camp au trait ; déclare la perte au temps à zéro. */
+  tick: (elapsedMs: number) => void;
+  newGame: (opts: { mode: GameMode; playerColor?: Color; botElo?: number; startFen?: string; exerciseBestMove?: string | null; exerciseDrillId?: string | null; goal?: { key: string; label: string } | null; exerciseTheme?: string | null; exerciseHint?: string | null; timeControl?: TimeControl }) => void;
   playMove: (m: MoveInput | string) => MoveRecord | null;
   undo: (plies: number) => void;
   resign: () => void;
@@ -43,7 +49,7 @@ export interface GameState {
 }
 
 const STORAGE_KEY = 'bluered-current-game';
-type Persisted = Pick<GameState, 'startFen' | 'fen' | 'records' | 'mode' | 'playerColor' | 'botElo' | 'status' | 'startedAt' | 'savedGameId' | 'exerciseBestMove' | 'flipped' | 'heatmapMode'> & Partial<Pick<GameState, 'exerciseDrillId' | 'goal' | 'lastMoveAt' | 'exerciseTheme' | 'exerciseHint'>>;
+type Persisted = Pick<GameState, 'startFen' | 'fen' | 'records' | 'mode' | 'playerColor' | 'botElo' | 'status' | 'startedAt' | 'savedGameId' | 'exerciseBestMove' | 'flipped' | 'heatmapMode'> & Partial<Pick<GameState, 'exerciseDrillId' | 'goal' | 'lastMoveAt' | 'exerciseTheme' | 'exerciseHint' | 'timeControl' | 'clocks'>>;
 
 /** Relit la partie en cours depuis localStorage (survit au rechargement et à la fermeture de l'app). */
 export function loadPersistedGame(storage: Pick<Storage, 'getItem'> | null = typeof localStorage !== 'undefined' ? localStorage : null): Partial<Persisted> {
@@ -76,6 +82,8 @@ export function persistGame(state: GameState, storage: Pick<Storage, 'setItem'> 
     exerciseDrillId: state.exerciseDrillId,
     exerciseTheme: state.exerciseTheme,
     exerciseHint: state.exerciseHint,
+    timeControl: state.timeControl,
+    clocks: state.clocks,
     goal: state.goal,
     lastMoveAt: state.lastMoveAt,
   };
@@ -105,8 +113,10 @@ export const useGame = create<GameState>((set, get) => ({
   exerciseHint: null,
   goal: null,
   lastMoveAt: Date.now(),
+  timeControl: 'unlimited',
+  clocks: null,
   ...loadPersistedGame(),
-  newGame: ({ mode, playerColor = 'w', botElo = 1000, startFen = START_FEN, exerciseBestMove = null, exerciseDrillId = null, goal = null, exerciseTheme = null, exerciseHint = null }) =>
+  newGame: ({ mode, playerColor = 'w', botElo = 1000, startFen = START_FEN, exerciseBestMove = null, exerciseDrillId = null, goal = null, exerciseTheme = null, exerciseHint = null, timeControl = 'unlimited' }) =>
     set({
       startFen,
       fen: startFen,
@@ -125,6 +135,8 @@ export const useGame = create<GameState>((set, get) => ({
       exerciseHint,
       goal,
       lastMoveAt: Date.now(),
+      timeControl,
+      clocks: TIME_CONTROLS[timeControl].seconds ? { w: TIME_CONTROLS[timeControl].seconds! * 1000, b: TIME_CONTROLS[timeControl].seconds! * 1000 } : null,
     }),
   playMove: (m) => {
     const s = get();
@@ -144,10 +156,22 @@ export const useGame = create<GameState>((set, get) => ({
     const fen = records.length ? records[records.length - 1].fenAfter : s.startFen;
     set({ records, fen, status: { over: false }, botThinking: false, lastMoveAt: Date.now() });
   },
+  tick: (elapsedMs) => {
+    const s = get();
+    if (!s.clocks || s.status.over || s.records.length === 0) return;
+    const side = s.fen.split(' ')[1] === 'b' ? 'b' : 'w';
+    const left = Math.max(0, s.clocks[side] - elapsedMs);
+    const clocks = { ...s.clocks, [side]: left };
+    if (left <= 0) {
+      set({ clocks, status: { over: true, result: side === 'w' ? '0-1' : '1-0', reason: 'timeout' } });
+    } else {
+      set({ clocks });
+    }
+  },
   resign: () => {
     const s = get();
     if (s.status.over) return;
-    const loser = s.mode === 'bot' ? s.playerColor : s.fen.split(' ')[1];
+    const loser = s.mode === 'bot' || s.mode === 'exercise' ? s.playerColor : s.fen.split(' ')[1];
     set({ status: { over: true, result: loser === 'w' ? '0-1' : '1-0', reason: 'resign' } });
   },
   agreeDraw: () => set({ status: { over: true, result: '1/2-1/2', reason: 'draw-agreed' } }),

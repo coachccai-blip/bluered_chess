@@ -300,3 +300,41 @@ test.describe('écran tactile', () => {
     await expect(page.getByTestId('blundercheck-toggle')).toContainText('coupé');
   });
 });
+
+test('mode exploration : meilleur coup expliqué, flèche et « jouer le meilleur coup »', async ({ page }) => {
+  await skipOnboarding(page);
+  await page.goto('#/partie');
+  await page.getByTestId('mode-explore').click();
+  await page.getByTestId('explore-fen').fill('6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1');
+  await page.getByTestId('start-game').click();
+  await expect(page.getByTestId('live-comment')).toContainText('Meilleur coup', { timeout: 40_000 });
+  await expect(page.getByTestId('evalbar')).toHaveAttribute('data-cp', /\d+/);
+  await expect(page.locator('[data-testid="board"] line')).toHaveCount(1);
+  await page.getByTestId('play-best').click();
+  await expect(page.getByTestId('status')).toContainText('Échec et mat');
+});
+
+test('cadence blitz : pendules, bot recommandé par cadence et perte au temps', async ({ page }) => {
+  await skipOnboarding(page);
+  await page.goto('#/partie');
+  await page.getByTestId('tc-blitz').click();
+  await expect(page.getByTestId('bot-elo')).toHaveText('800'); // bot recommandé de la cadence (profil neuf)
+  await page.getByTestId('mode-human').click();
+  await page.getByTestId('start-game').click();
+  await expect(page.getByTestId('clock-w')).toHaveText('5:00');
+  await move(page, 'e2', 'e4');
+  // La pendule du Rouge tourne après le premier coup.
+  await page.waitForTimeout(1300);
+  await expect(page.getByTestId('clock-b')).not.toHaveText('5:00');
+  await expect(page.getByTestId('clock-w')).toHaveText('5:00');
+  // Perte au temps simulée : on vide la pendule du Rouge via le store persisté.
+  await page.evaluate(() => {
+    const raw = localStorage.getItem('bluered-current-game');
+    const data = JSON.parse(raw!);
+    data.clocks = { w: 300000, b: 300 };
+    localStorage.setItem('bluered-current-game', JSON.stringify(data));
+  });
+  await page.reload();
+  await expect(page.getByTestId('status')).toContainText('Temps écoulé', { timeout: 10_000 });
+  await expect(page.getByTestId('status')).toContainText('Bleu gagne');
+});

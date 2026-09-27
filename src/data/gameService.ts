@@ -1,10 +1,10 @@
 // Orchestration : enregistrer une partie, mettre à jour le profil, l'Elo et le plan.
 import { db, loadProfile, saveProfile } from './db';
-import { newId, type Analysis, type Drill, type Game, type GameGoal, type GameResult, type Profile, type TrainingPlan } from './models';
+import { newId, type Analysis, type Drill, type Game, type GameGoal, type GameResult, type Profile, type TimeControl, type TrainingPlan } from './models';
+import { applyResult } from '../progress/ratings';
 import { drillsFromAnalysis, nextReview } from '../progress/drills';
 import { evaluateGoal } from '../progress/goals';
 import { buildPgn, START_FEN } from '../chess/game';
-import { recommendBot, updateElo, updateStreak } from '../progress/elo';
 import { computeIndicators, resultScore } from '../progress/profile';
 import { generatePlan, shouldRegeneratePlan } from '../progress/trainingPlan';
 import type { GameAnalysis } from '../analysis/analyzeGame';
@@ -19,8 +19,9 @@ export interface FinishedGameInput {
   result: GameResult;
   endReason?: string;
   startedAt: number;
-  mode: 'bot' | 'human' | 'exercise';
+  mode: 'bot' | 'human' | 'exercise' | 'explore';
   goal?: GameGoal | null;
+  timeControl?: TimeControl;
 }
 
 export async function saveFinishedGame(input: FinishedGameInput): Promise<Game> {
@@ -50,23 +51,14 @@ export async function saveFinishedGame(input: FinishedGameInput): Promise<Game> 
     imported: input.mode !== 'bot',
     thinkTimes: input.records.map((r) => r.thinkMs ?? 0),
     goal: input.goal ?? undefined,
+    timeControl: input.timeControl ?? 'unlimited',
   };
   if (input.mode === 'bot' && input.result !== '*' && input.startFen === START_FEN) {
     const score = resultScore(game);
-    const before = profile.estimatedElo;
-    const after = updateElo(before, input.botElo, score);
+    const { profile: updated, before, after } = applyResult(profile, input.timeControl ?? 'unlimited', input.botElo, score, game.createdAt);
     game.eloBefore = before;
     game.eloAfter = after;
-    const streak = updateStreak(profile.streak, score);
-    const updated: Profile = {
-      ...profile,
-      estimatedElo: after,
-      eloHistory: [...profile.eloHistory, { date: game.createdAt, elo: after }],
-      streak,
-      recommendedBotElo: recommendBot(input.botElo, streak, after),
-      updatedAt: Date.now(),
-    };
-    await saveProfile(updated, db);
+    await saveProfile(updated as Profile, db);
   }
   await db.games.add(game);
   const settings = useSettings.getState();

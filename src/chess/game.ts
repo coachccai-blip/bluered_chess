@@ -30,7 +30,7 @@ export interface MoveRecord {
 
 export type GameStatus =
   | { over: false }
-  | { over: true; result: '1-0' | '0-1' | '1/2-1/2'; reason: 'checkmate' | 'stalemate' | 'repetition' | 'fifty-moves' | 'insufficient' | 'resign' | 'draw-agreed' };
+  | { over: true; result: '1-0' | '0-1' | '1/2-1/2'; reason: 'checkmate' | 'stalemate' | 'repetition' | 'fifty-moves' | 'insufficient' | 'resign' | 'draw-agreed' | 'timeout' };
 
 export function toLan(m: CjsMove): string {
   return `${m.from}${m.to}${m.promotion ?? ''}`;

@@ -2,6 +2,23 @@
 import type { KeyMoment, MoveEval, GameSummary } from '../analysis/coach';
 
 export type PlayerColor = 'blue' | 'red';
+
+/** Cadences : illimité (défaut), 10 minutes, 5 minutes (blitz). Chaque cadence a son propre Elo maison. */
+export type TimeControl = 'unlimited' | 'rapid' | 'blitz';
+export const TIME_CONTROLS: Record<TimeControl, { label: string; short: string; seconds: number | null }> = {
+  unlimited: { label: 'Illimité', short: '∞', seconds: null },
+  rapid: { label: 'Normal · 10 min', short: '10 min', seconds: 600 },
+  blitz: { label: 'Blitz · 5 min', short: '5 min', seconds: 300 },
+};
+export const TIME_CONTROL_KEYS: TimeControl[] = ['unlimited', 'rapid', 'blitz'];
+
+/** Classement pour une cadence. */
+export interface Rating {
+  elo: number;
+  history: EloPoint[];
+  streak: { wins: number; losses: number };
+  recommendedBotElo: number;
+}
 export type GameResult = '1-0' | '0-1' | '1/2-1/2' | '*';
 
 export interface Game {
@@ -23,6 +40,8 @@ export interface Game {
   eloAfter?: number;
   /** Temps de réflexion par demi-coup (ms). */
   thinkTimes?: number[];
+  /** Cadence jouée (absente = illimité). */
+  timeControl?: TimeControl;
   /** Objectif de la partie (tiré du plan), vérifié à l'analyse. */
   goal?: GameGoal;
 }
@@ -82,6 +101,8 @@ export interface Profile {
   recommendedBotElo: number;
   onboardingDone: boolean;
   blindfoldScores?: { date: number; score: number }[];
+  /** Un classement par cadence (estimatedElo, eloHistory, streak et recommendedBotElo reflètent la cadence illimitée). */
+  ratings?: Record<TimeControl, Rating>;
 }
 
 export interface Exercise {
